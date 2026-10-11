@@ -1,6 +1,7 @@
 // ============ CÀ PHÊ — toàn bộ logic của app (React) ============
 // Cấu trúc: 1) tiện ích  2) dữ liệu mẫu + localStorage  3) component nhỏ  4) các trang  5) App gốc
 import React, { useState, useEffect, useRef } from 'react';
+import ICAL from 'ical.js';
 
 // ---------- 1) Tiện ích ----------
 const pad = n => String(n).padStart(2, '0');
@@ -195,9 +196,9 @@ function Today({ db, openTx, openTask, openList, openProfile, toggle, delTask })
     <div className="col gap">{tasks.length ? tasks.map(x => <TaskRow key={x.id} t={x} onToggle={toggle} onEdit={openTask} onDel={delTask} />) : <div className="card empty"><span className="big">📝</span><p>Hôm nay chưa có việc nào.</p><button className="btn sm" onClick={() => openTask({ date: t })}>+ Thêm việc đầu tiên</button></div>}</div></div>);
 }
 
-function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip }) {
+function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, importIcs }) {
   const [sel, setSel] = useState(today()), [col, setCol] = useState(0), [dir, setDir] = useState('n'), [ys, setYs] = useState(false), [drag, setDrag] = useState(null), [noTr, setNoTr] = useState(false);
-  const [q, setQ] = useState(''), [msg, setMsg] = useState(''), sw = useRef(null), clipRef = useRef(null), wheelLock = useRef(false);
+  const [q, setQ] = useState(''), [msg, setMsg] = useState(''), sw = useRef(null), clipRef = useRef(null), wheelLock = useRef(false), fileRef = useRef(null);;
   const CH = 48, ws = wkStart(sel), days = [...Array(7)].map((_, i) => addDays(ws, i)), HH = 48, H0 = 7;
   const isMob = () => !!window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
   const dayTasks = d => db.tasks.filter(x => x.date === d).sort((a, b) => a.start.localeCompare(b.start));
@@ -235,6 +236,23 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip }) {
   const copyD = () => { const items = dayTasks(sel).map(x => ({ ...x, off: 0 })); setClip({ kind: 'day', items }); say(`Đã sao chép ngày (${items.length} việc)`); };
   const paste = () => { const n = pasteClip(clip.kind === 'week' ? ws : sel); say(n ? `Đã dán ${n} việc` : 'Không có việc nào để dán (hoặc đã có sẵn)'); };
   const list = dayTasks(sel), add = () => { openTask({ date: sel, title: q.trim() }); setQ(''); };
+  const handleIcs = async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await importIcs(file);
+      say(
+        result.added
+          ? `Đã nhập ${result.added} sự kiện${result.skipped ? `, bỏ qua ${result.skipped} sự kiện trùng` : ''}.`
+          : 'Không có sự kiện mới để nhập.'
+      );
+    } catch (error) {
+      say(error.message || 'Không đọc được file .ics.');
+    }
+
+    e.target.value = '';
+  };
   const cell = (d, out) => <button key={d} className={'cell ' + (d === sel ? 'sel ' : '') + (out ? 'out' : '')} onClick={() => setSel(d)}>
     <span className={'dn ' + (d === today() ? 'now' : '')}>{+d.slice(8)}</span>
     <span className="bars">{dayTasks(d).slice(0, 3).map(x => <i key={x.id} style={{ background: x.pri === 'Cao' ? 'var(--warn)' : CC[x.cat], opacity: x.status === 'done' ? .4 : 1 }} />)}</span></button>;
@@ -243,7 +261,17 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip }) {
       <div className="row gap"><button className="btn sm out" onClick={() => go(-1)}>←</button><button className="btn sm out" onClick={() => jump(today())}>Hôm nay</button><button className="btn sm out" onClick={() => go(1)}>→</button>
         <button className="btn sm desk" onClick={() => openTask({ date: sel })}>+ Thêm việc</button></div></div>
     <p className="mut s desk">{days[0].split('-').reverse().join('/')} – {days[6].split('-').reverse().join('/')}</p>
-    <div className="row gap wrap"><button className="btn sm out" onClick={copyW}>⧉ Sao chép tuần</button><button className="btn sm out" onClick={copyD}>⧉ Sao chép ngày</button>
+    <div className="row gap wrap">
+  <button className="btn sm out" onClick={copyW}>⧉ Sao chép tuần</button>
+  <button className="btn sm out" onClick={copyD}>⧉ Sao chép ngày</button>
+  <button className="btn sm out" onClick={() => fileRef.current?.click()}>📥 Nhập lịch .ics</button>
+  <input
+    ref={fileRef}
+    type="file"
+    accept=".ics,text/calendar"
+    onChange={handleIcs}
+    style={{ display: 'none' }}
+  />
       {clip && <button className="btn sm" onClick={paste}>📋 Dán {clip.kind === 'week' ? 'tuần' : 'ngày'}</button>}{msg && <span className="s" style={{ color: 'var(--ok)' }}>{msg}</span>}</div>
     {/* Desktop: lưới tuần */}
     <div className="card wk desk" onWheel={e => { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 20 && !wheelLock.current) { wheelLock.current = true; go(e.deltaX > 0 ? 1 : -1); setTimeout(() => { wheelLock.current = false; }, 500); } }}><div className={'wkanim ' + (dir === 'n' ? 'wn' : 'wp')} key={ws}><div className="wkh"><i />{days.map((d, i) => <div key={d} className={(d === today() ? 'tdy ' : '') + (d === sel ? 'selh' : '')} onClick={() => setSel(d)}>{DAYS[i]} <b>{d.slice(8)}</b></div>)}</div>
@@ -372,6 +400,78 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
   const openList = type => setModal({ k: 'list', type });
   const openProfile = () => setModal({ k: 'profile' });
   const openGroups = () => setModal({ k: 'groups' });
+  const importIcs = async file => {
+    try {
+      const text = await file.text();
+      const calendar = new ICAL.Component(ICAL.parse(text));
+
+      const imported = calendar.getAllSubcomponents('vevent')
+        .map(component => {
+          const event = new ICAL.Event(component);
+          const start = event.startDate;
+          if (!start) return null;
+
+          const title = (event.summary || 'Sự kiện từ lịch').trim();
+
+          // Sự kiện cả ngày: đưa vào lịch dưới dạng việc 09:00–10:00
+          if (start.isDate) {
+            return {
+              id: uid(),
+              title,
+              date: start.toString().slice(0, 10),
+              start: '09:00',
+              end: '10:00',
+              cat: 'Cá nhân',
+              pri: 'Trung bình',
+              status: 'todo',
+              note: event.description || 'Nhập từ file lịch .ics',
+            };
+          }
+
+          const startAt = start.toJSDate();
+          const endAt = event.endDate
+            ? event.endDate.toJSDate()
+            : new Date(startAt.getTime() + 60 * 60 * 1000);
+
+          return {
+            id: uid(),
+            title,
+            date: iso(startAt),
+            start: `${pad(startAt.getHours())}:${pad(startAt.getMinutes())}`,
+            end: `${pad(endAt.getHours())}:${pad(endAt.getMinutes())}`,
+            cat: 'Cá nhân',
+            pri: 'Trung bình',
+            status: 'todo',
+            note: event.description || 'Nhập từ file lịch .ics',
+          };
+        })
+        .filter(Boolean);
+
+      const existing = new Set(
+        db.tasks.map(task => `${task.date}|${task.start}|${task.end}|${task.title}`)
+      );
+
+      const newTasks = imported.filter(task => {
+        const key = `${task.date}|${task.start}|${task.end}|${task.title}`;
+        if (existing.has(key)) return false;
+        existing.add(key);
+        return true;
+      });
+
+      setDb(current => ({
+        ...current,
+        tasks: [...current.tasks, ...newTasks],
+      }));
+
+      return {
+        added: newTasks.length,
+        skipped: imported.length - newTasks.length,
+      };
+    } catch (error) {
+      console.error(error);
+      throw new Error('Không đọc được file .ics này.');
+    }
+  };
   const saveTx = t => { setDb(d => ({ ...d, groups: d.groups.some(g => g.name === t.grp) ? d.groups : [...d.groups, { name: t.grp, share: .1, color: PAL[d.groups.length % PAL.length] }] })); upsert('txs', t); };
   const pasteClip = target => { // dán việc đã sao chép: tuần → vào tuần bắt đầu `target`; ngày → vào ngày `target`. Bỏ qua việc trùng, trạng thái về "Chưa làm"
     if (!clip) return 0;
@@ -383,7 +483,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
     upsert('tasks', { ...t, status: done ? 'done' : 'todo' }); if (gl && net) flash(`${gl.title}: ${(done ? net : -net) > 0 ? '+' : '−'}${money(Math.abs(net))}`); };
   const saveGoal = g => { setDb(d => { const list = d.goals.some(x => x.id === g.id) ? d.goals.map(x => x.id === g.id ? g : x) : [...d.goals, g]; return { ...d, goals: g.auto ? list.map(x => x.id !== g.id ? { ...x, auto: false } : x) : list }; }); setModal(null); };
   const bump = g => upsert('goals', { ...g, current: g.current + (g.unit === 'đ' ? 500000 : 1) });
-  const P = { db, openTx, openTask, openGoal, openList, openProfile, openGroups, clip, setClip, pasteClip, toggle, delTask: id => del('tasks', id), delTx: id => del('txs', id), delGoal: id => del('goals', id), bump };
+  const P = { db, openTx, openTask, openGoal, openList, openProfile, openGroups, clip, setClip, pasteClip, toggle, delTask: id => del('tasks', id), delTx: id => del('txs', id), delGoal: id => del('goals', id), bump, importIcs };
   return (<div className="app">
     <aside className="side"><div className="logo"><LogoIcon s={34} /> Cà Phê</div><small className="mut">Quản lý cuộc sống sinh viên</small>
       <nav>{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav></aside>
