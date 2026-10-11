@@ -405,47 +405,63 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
       const text = await file.text();
       const calendar = new ICAL.Component(ICAL.parse(text));
 
-      const imported = calendar.getAllSubcomponents('vevent')
-        .map(component => {
-          const event = new ICAL.Event(component);
-          const start = event.startDate;
-          if (!start) return null;
+      // Chỉ mở rộng lịch trong khoảng 6 tháng trước và sau hôm nay để các
+      // RRULE không có ngày kết thúc không tạo ra vô hạn sự kiện.
+      const rangeStart = new Date();
+      rangeStart.setMonth(rangeStart.getMonth() - 6);
+      rangeStart.setHours(0, 0, 0, 0);
+      const rangeEnd = new Date();
+      rangeEnd.setMonth(rangeEnd.getMonth() + 6);
+      rangeEnd.setHours(23, 59, 59, 999);
 
-          const title = (event.summary || 'Sự kiện từ lịch').trim();
+      const toTask = (event, occurrence) => {
+        const originalStart = event.startDate;
+        const title = (event.summary || 'Sự kiện từ lịch').trim();
 
-          // Sự kiện cả ngày: đưa vào lịch dưới dạng việc 09:00–10:00
-          if (start.isDate) {
-            return {
-              id: uid(),
-              title,
-              date: start.toString().slice(0, 10),
-              start: '09:00',
-              end: '10:00',
-              cat: 'Cá nhân',
-              pri: 'Trung bình',
-              status: 'todo',
-              note: event.description || 'Nhập từ file lịch .ics',
-            };
-          }
+        // Sự kiện cả ngày: đưa vào lịch dưới dạng việc 09:00–10:00.
+        if (occurrence.isDate) return {
+          id: uid(), title, date: occurrence.toString().slice(0, 10),
+          start: '09:00', end: '10:00', cat: 'Cá nhân', pri: 'Trung bình',
+          status: 'todo', note: event.description || 'Nhập từ file lịch .ics',
+        };
 
-          const startAt = start.toJSDate();
-          const endAt = event.endDate
-            ? event.endDate.toJSDate()
-            : new Date(startAt.getTime() + 60 * 60 * 1000);
+        const originalEnd = event.endDate
+          ? event.endDate.toJSDate()
+          : new Date(originalStart.toJSDate().getTime() + 60 * 60 * 1000);
+        const duration = Math.max(60 * 1000, originalEnd - originalStart.toJSDate());
+        const startAt = occurrence.toJSDate();
+        const endAt = new Date(startAt.getTime() + duration);
 
-          return {
-            id: uid(),
-            title,
-            date: iso(startAt),
-            start: `${pad(startAt.getHours())}:${pad(startAt.getMinutes())}`,
-            end: `${pad(endAt.getHours())}:${pad(endAt.getMinutes())}`,
-            cat: 'Cá nhân',
-            pri: 'Trung bình',
-            status: 'todo',
-            note: event.description || 'Nhập từ file lịch .ics',
-          };
-        })
-        .filter(Boolean);
+        return {
+          id: uid(), title, date: iso(startAt),
+          start: `${pad(startAt.getHours())}:${pad(startAt.getMinutes())}`,
+          end: `${pad(endAt.getHours())}:${pad(endAt.getMinutes())}`,
+          cat: 'Cá nhân', pri: 'Trung bình', status: 'todo',
+          note: event.description || 'Nhập từ file lịch .ics',
+        };
+      };
+
+      const imported = calendar.getAllSubcomponents('vevent').flatMap(component => {
+        // Các ngoại lệ của một chuỗi lặp sẽ được xử lý ở lần nâng cấp tiếp theo.
+        if (component.hasProperty('recurrence-id')) return [];
+        const event = new ICAL.Event(component);
+        if (!event.startDate) return [];
+
+        if (!event.isRecurring()) return [toTask(event, event.startDate)];
+
+        const expansion = new ICAL.RecurExpansion({
+          component,
+          dtstart: component.getFirstPropertyValue('dtstart'),
+        });
+        const tasks = [];
+        let occurrence, safety = 0;
+        while ((occurrence = expansion.next()) && safety++ < 500) {
+          const startAt = occurrence.toJSDate();
+          if (startAt > rangeEnd) break;
+          if (startAt >= rangeStart) tasks.push(toTask(event, occurrence));
+        }
+        return tasks;
+      });
 
       const existing = new Set(
         db.tasks.map(task => `${task.date}|${task.start}|${task.end}|${task.title}`)
