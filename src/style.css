@@ -114,3 +114,6 @@ input,select,textarea{background:var(--bg);border:1px solid var(--line);border-r
 .banner:hover .hop span{animation:hop .55s cubic-bezier(.3,1.6,.5,1) both;animation-delay:calc(var(--i) * 45ms)}
 @keyframes hop{0%{transform:translateY(0)}35%{transform:translateY(-12px) rotate(-4deg)}65%{transform:translateY(2px)}100%{transform:translateY(0)}}
 @media (prefers-reduced-motion:reduce){.banner:hover .hop span{animation:none}}
+
+/* Khối việc trong lịch tuần: mỗi dòng phụ chỉ 1 dòng, cắt gọn bằng "…" (ghi chú dài nhập từ .ics) */
+.blk small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

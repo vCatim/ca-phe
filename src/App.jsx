@@ -196,10 +196,42 @@ function Today({ db, openTx, openTask, openList, openProfile, toggle, delTask })
     <div className="col gap">{tasks.length ? tasks.map(x => <TaskRow key={x.id} t={x} onToggle={toggle} onEdit={openTask} onDel={delTask} />) : <div className="card empty"><span className="big">📝</span><p>Hôm nay chưa có việc nào.</p><button className="btn sm" onClick={() => openTask({ date: t })}>+ Thêm việc đầu tiên</button></div>}</div></div>);
 }
 
+// Đọc nội dung file .ics → danh sách việc (xuất ra để kiểm thử). Lịch lặp chỉ mở rộng ±6 tháng quanh `now`.
+// EXDATE do ical.js tự loại; buổi bị dời/sửa (RECURRENCE-ID) được gắn vào chuỗi lặp; buổi STATUS:CANCELLED bị bỏ qua.
+export function parseIcs(text, cat = 'Học tập', now = new Date()) {
+  const calendar = new ICAL.Component(ICAL.parse(text));
+  const rangeStart = new Date(now); rangeStart.setMonth(rangeStart.getMonth() - 6); rangeStart.setHours(0, 0, 0, 0);
+  const rangeEnd = new Date(now); rangeEnd.setMonth(rangeEnd.getMonth() + 6); rangeEnd.setHours(23, 59, 59, 999);
+  const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const cancelled = c => String(c.getFirstPropertyValue('status') || '').toUpperCase() === 'CANCELLED';
+  const toTask = (ev, st, en) => {
+    const title = (ev.summary || 'Sự kiện từ lịch').trim(), note = ev.description || 'Nhập từ file lịch .ics';
+    if (st.isDate) return { id: uid(), title, date: st.toString().slice(0, 10), start: '09:00', end: '10:00', cat, pri: 'Trung bình', status: 'todo', note }; // cả ngày → 09:00–10:00
+    const a = st.toJSDate(), b = en && en.toJSDate() > a ? en.toJSDate() : new Date(a.getTime() + 36e5);
+    return { id: uid(), title, date: iso(a), start: hm(a), end: iso(b) === iso(a) ? hm(b) : '23:59', cat, pri: 'Trung bình', status: 'todo', note }; // qua nửa đêm → cắt ở 23:59
+  };
+  const all = calendar.getAllSubcomponents('vevent'), exceptions = all.filter(c => c.hasProperty('recurrence-id')), out = [];
+  for (const c of all.filter(c => !c.hasProperty('recurrence-id'))) {
+    if (cancelled(c)) continue;
+    const ev = new ICAL.Event(c);
+    if (!ev.startDate) continue;
+    if (!ev.isRecurring()) { out.push(toTask(ev, ev.startDate, ev.endDate)); continue; }
+    exceptions.filter(x => x.getFirstPropertyValue('uid') === ev.uid).forEach(x => ev.relateException(new ICAL.Event(x)));
+    const it = ev.iterator(); let occ, n = 0;
+    while ((occ = it.next()) && n++ < 1000) {
+      const d = ev.getOccurrenceDetails(occ), at = d.startDate.toJSDate();
+      if (at > rangeEnd) break;
+      if (at < rangeStart || cancelled(d.item.component)) continue;
+      out.push(toTask(d.item, d.startDate, d.endDate));
+    }
+  }
+  return out;
+}
+
 function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, importIcs }) {
   const [sel, setSel] = useState(today()), [col, setCol] = useState(0), [dir, setDir] = useState('n'), [ys, setYs] = useState(false), [drag, setDrag] = useState(null), [noTr, setNoTr] = useState(false);
-  const [q, setQ] = useState(''), [msg, setMsg] = useState(''), sw = useRef(null), clipRef = useRef(null), wheelLock = useRef(false), fileRef = useRef(null);;
-  const CH = 48, ws = wkStart(sel), days = [...Array(7)].map((_, i) => addDays(ws, i)), HH = 48, H0 = 7;
+  const [q, setQ] = useState(''), [msg, setMsg] = useState(''), sw = useRef(null), clipRef = useRef(null), wheelLock = useRef(false), fileRef = useRef(null), [icsCat, setIcsCat] = useState('Học tập');
+  const CH = 48, ws = wkStart(sel), days = [...Array(7)].map((_, i) => addDays(ws, i)), HH = 48, H0 = 6, HR = 17; // lưới từ 06:00, 17 hàng (đến 23:00)
   const isMob = () => !!window.matchMedia && window.matchMedia('(max-width: 900px)').matches;
   const dayTasks = d => db.tasks.filter(x => x.date === d).sort((a, b) => a.start.localeCompare(b.start));
   const say = t => { setMsg(t); setTimeout(() => setMsg(''), 3000); };
@@ -241,7 +273,7 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, imp
     if (!file) return;
 
     try {
-      const result = await importIcs(file);
+      const result = await importIcs(file, icsCat);
       say(
         result.added
           ? `Đã nhập ${result.added} sự kiện${result.skipped ? `, bỏ qua ${result.skipped} sự kiện trùng` : ''}.`
@@ -264,6 +296,7 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, imp
     <div className="row gap wrap">
   <button className="btn sm out" onClick={copyW}>⧉ Sao chép tuần</button>
   <button className="btn sm out" onClick={copyD}>⧉ Sao chép ngày</button>
+  <span className="s mut">Nhập vào nhóm</span><select value={icsCat} onChange={e => setIcsCat(e.target.value)} style={{ width: 'auto' }}>{CATS.map(c => <option key={c}>{c}</option>)}</select>
   <button className="btn sm out" onClick={() => fileRef.current?.click()}>📥 Nhập lịch .ics</button>
   <input
     ref={fileRef}
@@ -275,9 +308,10 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, imp
       {clip && <button className="btn sm" onClick={paste}>📋 Dán {clip.kind === 'week' ? 'tuần' : 'ngày'}</button>}{msg && <span className="s" style={{ color: 'var(--ok)' }}>{msg}</span>}</div>
     {/* Desktop: lưới tuần */}
     <div className="card wk desk" onWheel={e => { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 20 && !wheelLock.current) { wheelLock.current = true; go(e.deltaX > 0 ? 1 : -1); setTimeout(() => { wheelLock.current = false; }, 500); } }}><div className={'wkanim ' + (dir === 'n' ? 'wn' : 'wp')} key={ws}><div className="wkh"><i />{days.map((d, i) => <div key={d} className={(d === today() ? 'tdy ' : '') + (d === sel ? 'selh' : '')} onClick={() => setSel(d)}>{DAYS[i]} <b>{d.slice(8)}</b></div>)}</div>
-      <div className="wkb" style={{ height: 16 * HH }}><div className="hrs">{[...Array(16)].map((_, i) => <span key={i} style={{ height: HH }}>{pad(H0 + i)}:00</span>)}</div>
+      <div className="wkb" style={{ height: HR * HH }}><div className="hrs">{[...Array(HR)].map((_, i) => <span key={i} style={{ height: HH }}>{pad(H0 + i)}:00</span>)}</div>
         {days.map(d => <div key={d} className="dcol" style={{ backgroundSize: `100% ${HH}px` }}>{dayTasks(d).map(x => {
-          const top = Math.max(0, (toMin(x.start) - H0 * 60) / 60 * HH), hh = Math.max(26, (toMin(x.end) - toMin(x.start)) / 60 * HH);
+          const s0 = Math.max(toMin(x.start), H0 * 60), e0 = Math.min(toMin(x.end), (H0 + HR) * 60); // cắt phần nằm ngoài lưới
+          const top = (s0 - H0 * 60) / 60 * HH, hh = Math.max(26, (e0 - s0) / 60 * HH);
           return <div key={x.id} className={'blk ' + (x.pri === 'Cao' ? 'hp ' : '') + (x.status === 'done' ? 'done' : '')} style={{ top, height: hh, '--c': CC[x.cat] }} onClick={() => openTask(x)}><b>{x.title}</b><small>{x.start}–{x.end}</small><small>{x.note}</small></div>;
         })}</div>)}</div></div></div>
     {/* Mobile: lịch tháng/tuần kéo theo ngón tay + danh sách theo ngày */}
@@ -400,93 +434,14 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
   const openList = type => setModal({ k: 'list', type });
   const openProfile = () => setModal({ k: 'profile' });
   const openGroups = () => setModal({ k: 'groups' });
-  const importIcs = async file => {
-    try {
-      const text = await file.text();
-      const calendar = new ICAL.Component(ICAL.parse(text));
-
-      // Chỉ mở rộng lịch trong khoảng 6 tháng trước và sau hôm nay để các
-      // RRULE không có ngày kết thúc không tạo ra vô hạn sự kiện.
-      const rangeStart = new Date();
-      rangeStart.setMonth(rangeStart.getMonth() - 6);
-      rangeStart.setHours(0, 0, 0, 0);
-      const rangeEnd = new Date();
-      rangeEnd.setMonth(rangeEnd.getMonth() + 6);
-      rangeEnd.setHours(23, 59, 59, 999);
-
-      const toTask = (event, occurrence) => {
-        const originalStart = event.startDate;
-        const title = (event.summary || 'Sự kiện từ lịch').trim();
-
-        // Sự kiện cả ngày: đưa vào lịch dưới dạng việc 09:00–10:00.
-        if (occurrence.isDate) return {
-          id: uid(), title, date: occurrence.toString().slice(0, 10),
-          start: '09:00', end: '10:00', cat: 'Cá nhân', pri: 'Trung bình',
-          status: 'todo', note: event.description || 'Nhập từ file lịch .ics',
-        };
-
-        const originalEnd = event.endDate
-          ? event.endDate.toJSDate()
-          : new Date(originalStart.toJSDate().getTime() + 60 * 60 * 1000);
-        const duration = Math.max(60 * 1000, originalEnd - originalStart.toJSDate());
-        const startAt = occurrence.toJSDate();
-        const endAt = new Date(startAt.getTime() + duration);
-
-        return {
-          id: uid(), title, date: iso(startAt),
-          start: `${pad(startAt.getHours())}:${pad(startAt.getMinutes())}`,
-          end: `${pad(endAt.getHours())}:${pad(endAt.getMinutes())}`,
-          cat: 'Cá nhân', pri: 'Trung bình', status: 'todo',
-          note: event.description || 'Nhập từ file lịch .ics',
-        };
-      };
-
-      const imported = calendar.getAllSubcomponents('vevent').flatMap(component => {
-        // Các ngoại lệ của một chuỗi lặp sẽ được xử lý ở lần nâng cấp tiếp theo.
-        if (component.hasProperty('recurrence-id')) return [];
-        const event = new ICAL.Event(component);
-        if (!event.startDate) return [];
-
-        if (!event.isRecurring()) return [toTask(event, event.startDate)];
-
-        const expansion = new ICAL.RecurExpansion({
-          component,
-          dtstart: component.getFirstPropertyValue('dtstart'),
-        });
-        const tasks = [];
-        let occurrence, safety = 0;
-        while ((occurrence = expansion.next()) && safety++ < 500) {
-          const startAt = occurrence.toJSDate();
-          if (startAt > rangeEnd) break;
-          if (startAt >= rangeStart) tasks.push(toTask(event, occurrence));
-        }
-        return tasks;
-      });
-
-      const existing = new Set(
-        db.tasks.map(task => `${task.date}|${task.start}|${task.end}|${task.title}`)
-      );
-
-      const newTasks = imported.filter(task => {
-        const key = `${task.date}|${task.start}|${task.end}|${task.title}`;
-        if (existing.has(key)) return false;
-        existing.add(key);
-        return true;
-      });
-
-      setDb(current => ({
-        ...current,
-        tasks: [...current.tasks, ...newTasks],
-      }));
-
-      return {
-        added: newTasks.length,
-        skipped: imported.length - newTasks.length,
-      };
-    } catch (error) {
-      console.error(error);
-      throw new Error('Không đọc được file .ics này.');
-    }
+  const importIcs = async (file, cat = 'Học tập') => {
+    let imported;
+    try { imported = parseIcs(await file.text(), cat); }
+    catch (error) { console.error(error); throw new Error('Không đọc được file .ics này.'); }
+    const key = t => `${t.date}|${t.start}|${t.end}|${t.title}`, existing = new Set(db.tasks.map(key));
+    const newTasks = imported.filter(t => { if (existing.has(key(t))) return false; existing.add(key(t)); return true; }); // bỏ việc trùng
+    setDb(current => ({ ...current, tasks: [...current.tasks, ...newTasks] }));
+    return { added: newTasks.length, skipped: imported.length - newTasks.length };
   };
   const saveTx = t => { setDb(d => ({ ...d, groups: d.groups.some(g => g.name === t.grp) ? d.groups : [...d.groups, { name: t.grp, share: .1, color: PAL[d.groups.length % PAL.length] }] })); upsert('txs', t); };
   const pasteClip = target => { // dán việc đã sao chép: tuần → vào tuần bắt đầu `target`; ngày → vào ngày `target`. Bỏ qua việc trùng, trạng thái về "Chưa làm"
