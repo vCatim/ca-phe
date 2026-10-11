@@ -1,0 +1,20 @@
+{
+  "name": "ca-phe",
+  "version": "0.1.0",
+  "description": "Cà Phê - quản lý lịch, thu chi, mục tiêu cho sinh viên",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4"
+  },
+  "private": true,
+  "type": "module"
+}
