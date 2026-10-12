@@ -106,9 +106,21 @@ const TimeInput = ({ value, onChange }) => { // giờ 24h, không AM/PM
   const [h, m] = value.split(':'), mins = [...Array(12)].map((_, i) => pad(i * 5)); if (!mins.includes(m)) { mins.push(m); mins.sort(); }
   return <div className="row gap"><select value={h} onChange={e => onChange(e.target.value + ':' + m)}>{[...Array(24)].map((_, i) => <option key={i}>{pad(i)}</option>)}</select><b>:</b><select value={m} onChange={e => onChange(h + ':' + e.target.value)}>{mins.map(x => <option key={x}>{x}</option>)}</select></div>;
 };
-const Modal = ({ title, onClose, children }) => (
-  <div className="ov" onClick={onClose}><div className="sheet" onClick={e => e.stopPropagation()}>
-    <div className="row between"><h3>{title}</h3><button className="ib" onClick={onClose}>✕</button></div>{children}</div></div>);
+const Modal = ({ title, onClose, children }) => {
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="ov" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={title} onClick={e => e.stopPropagation()}>
+        <div className="row between"><h3>{title}</h3><button className="ib" onClick={onClose} aria-label="Đóng">✕</button></div>
+        {children}
+      </div>
+    </div>
+  );
+};
 
 const TaskRow = ({ t, onToggle, onEdit, onDel }) => (
   <div className={'task ' + (t.status === 'done' ? 'done' : '')} style={{ '--c': CC[t.cat] }}>
@@ -146,7 +158,7 @@ function TxForm({ item, onSave, onClose }) {
   return (<Modal title={item.id ? 'Sửa giao dịch' : 'Thêm giao dịch'} onClose={onClose}>
     <div className="seg">{['expense', 'income'].map(t => <button key={t} className={f.type === t ? 'on' : ''} onClick={() => set('type', t)}>{t === 'income' ? 'Thu nhập' : 'Chi tiêu'}</button>)}</div>
     <Field l="Số tiền (đ)"><MoneyInput value={f.amount} onChange={v => set('amount', v)} placeholder="0" autoFocus /></Field>
-    <div className="chips2">{[10000, 20000, 50000, 100000].map(n => <button key={n} className="chip2" onClick={() => set('amount', (+f.amount || 0) + n)}>+{dots(n)}</button>)}</div>
+    <div className="chips2">{[5000, 10000, 20000, 50000, 100000].map(n => <button key={n} className="chip2" onClick={() => set('amount', (+f.amount || 0) + n)}>+{dots(n)}</button>)}</div>
     <Field l="Ghi chú"><input value={f.note} onChange={e => set('note', e.target.value)} placeholder="VD: Cà phê" /></Field>
     <div className="chips2">{CHIPS[f.type].map(c => <button key={c[0]} className="chip2" onClick={() => chip(c)}>{c[0]}</button>)}</div>
     <Field l="Nhóm"><select value={f.grp} onChange={e => set('grp', e.target.value)}>{item.groups.map(g => <option key={g}>{g}</option>)}<option value="__new">＋ Tạo nhóm mới…</option></select></Field>
@@ -494,11 +506,13 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
       const groups = d.groups.some(g => g.name === t.grp) ? d.groups : [...d.groups, { name: t.grp, share: .1, color: PAL[d.groups.length % PAL.length] }];
       return { ...d, groups, txs: old ? d.txs.map(x => x.id === t.id ? nt : x) : [...d.txs, nt] };
     });
+    flash(`Đã lưu ${t.type === 'income' ? 'thu nhập' : 'chi tiêu'}: ${money(t.amount)}`);
     setModal(null);
   };
   const saveTask = t => { // lưu việc; nếu đổi trạng thái hoàn thành thì cập nhật mục tiêu
     setDb(d => { const old = d.tasks.find(x => x.id === t.id), nd = { ...d, tasks: old ? d.tasks.map(x => x.id === t.id ? t : x) : [...d.tasks, t] }, was = !!old && old.status === 'done', now = t.status === 'done';
       return was === now ? nd : { ...nd, txs: retarget(nd, t.id, now) }; });
+    flash(`Đã lưu: "${t.title}"`);
     setModal(null);
   };
   const delTask = id => { const t = db.tasks.find(x => x.id === id); if (!t) return;
@@ -513,14 +527,29 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
       .filter(n => !db.tasks.some(x => x.date === n.date && x.start === n.start && x.end === n.end && x.title === n.title));
     if (add.length) setDb(d => ({ ...d, tasks: [...d.tasks, ...add] })); return add.length;
   };
-  const toggle = t => { const done = t.status !== 'done', net = db.txs.filter(x => x.taskId === t.id).reduce((a, x) => a + (x.type === 'income' ? x.amount : -x.amount), 0);
-    saveTask({ ...t, status: done ? 'done' : 'todo' }); if (net && db.goals.some(g => g.auto && g.unit === 'đ')) flash(`Mục tiêu: ${(done ? net : -net) > 0 ? '+' : '−'}${money(Math.abs(net))}`); };
+  const toggle = t => {
+    const done = t.status !== 'done', net = db.txs.filter(x => x.taskId === t.id).reduce((a, x) => a + (x.type === 'income' ? x.amount : -x.amount), 0);
+    saveTask({ ...t, status: done ? 'done' : 'todo' });
+    const todayTasks = db.tasks.filter(x => x.date === today());
+    const remaining = todayTasks.filter(x => x.id !== t.id && x.status !== 'done').length;
+    if (done && remaining === 0 && todayTasks.length > 0) {
+      flash('🎉 Hoàn thành hết việc hôm nay! Tự thưởng một ly cà phê nhé ☕✨');
+    } else if (net && db.goals.some(g => g.auto && g.unit === 'đ')) {
+      flash(`Mục tiêu: ${(done ? net : -net) > 0 ? '+' : '−'}${money(Math.abs(net))}`);
+    }
+  };
   const bump = g => upsert('goals', { ...g, current: g.current + 1 });
   const P = { db, openTx, openTask, openGoal, openList, openProfile, openGroups, clip, setClip, pasteClip, toggle, delTask, toggleAuto, cyclePri, delTx: id => del('txs', id), delGoal: id => del('goals', id), bump, importIcs };
   return (<div className="app">
     <aside className="side"><div className="logo"><LogoIcon s={34} /> Cà Phê</div><small className="mut">Quản lý cuộc sống sinh viên</small>
-      <nav>{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav></aside>
-    <main><div className="top"><div className="logo mobl"><LogoIcon s={26} /> Cà Phê</div></div>
+      <nav>{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav>
+      <div style={{ marginTop: 'auto', paddingTop: 16 }}>
+        <button className="btn sm out" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={toggleTheme} title="Đổi giao diện">
+          <span>{theme === 'dark' ? '☀️' : '🌙'}</span><span>{theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}</span>
+        </button>
+      </div>
+    </aside>
+    <main><div className="top"><div className="logo mobl"><LogoIcon s={26} /> Cà Phê</div><button className="theme" onClick={toggleTheme} aria-label="Đổi giao diện">{theme === 'dark' ? '☀️' : '🌙'}</button></div>
       <div key={page}>{page === 'today' && <Today {...P} />}{page === 'cal' && <Calendar {...P} />}{page === 'fin' && <Finance {...P} />}{page === 'goal' && <Goals {...P} />}</div></main>
     <nav className="bot">{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav>
     {toast && <div className="toast"><span>{toast.msg}</span>{toast.undo && <button onClick={toast.undo}>Hoàn tác</button>}</div>}
