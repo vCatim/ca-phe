@@ -7,10 +7,10 @@ Chạy được trên điện thoại lẫn máy tính, cài được như app (
 
 ## Tính năng
 - **Hôm nay**: lời chào, ngân sách trong ngày, việc cần làm, thu/chi nhanh
-- **Lịch**: xem theo tháng/tuần, vuốt để chuyển, sao chép và dán lịch tuần/ngày
+- **Lịch**: lưới 24 giờ, xem theo tháng/tuần, vuốt để chuyển, chọn nhanh ngày/tháng/năm, sao chép và dán lịch tuần/ngày
 - **Nhập lịch từ Google Calendar** qua file `.ics` (hỗ trợ lịch lặp, buổi bị dời/hủy), file chỉ được đọc ngay trên máy bạn
 - **Tài chính**: thu/chi theo nhóm việc, biểu đồ, tổng kết tuần và tháng
-- **Mục tiêu**: theo dõi tiến độ, tự cập nhật theo thu/chi của việc đã hoàn thành
+- **Mục tiêu**: nhiều mục tiêu, mức ưu tiên, bật tự động cộng/trừ theo thu/chi (việc đã hoàn thành và khoản không gắn việc)
 - Dữ liệu lưu trong trình duyệt, hoạt động cả khi mất mạng
 
 ## Chạy trên máy
