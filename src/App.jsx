@@ -74,8 +74,12 @@ const splitAlloc = (db, amount) => {
 const retarget = (db, taskId, done) => {
   let txs = db.txs;
   db.txs.filter(x => x.taskId === taskId).forEach(x => {
-    const alloc = done ? splitAlloc({ ...db, txs: txs.filter(y => y.id !== x.id) }, x.type === 'income' ? x.amount : -x.amount) : null;
-    txs = txs.map(y => { if (y.id !== x.id) return y; const { alloc: _a, ...r } = y; return alloc ? { ...r, alloc } : r; });
+    if (x.autoGoal === false) return;
+    const amount = x.type === 'income' ? x.amount : -x.amount;
+    const alloc = done
+      ? (x.goalId ? { [x.goalId]: amount } : splitAlloc({ ...db, txs: txs.filter(y => y.id !== x.id) }, amount))
+      : null;
+    txs = txs.map(y => { if (y.id !== x.id) return y; const { alloc: _a, ...r } = y; return alloc ? { ...r, alloc } : { ...r, alloc: null }; });
   });
   return txs;
 };
@@ -135,6 +139,7 @@ const TaskRow = ({ t, onToggle, onEdit, onDel }) => (
 function TaskForm({ item, onSave, onClose, onDel }) {
   const [f, setF] = useState(item), [more, setMore] = useState(!!item.id); const set = (k, v) => setF({ ...f, [k]: v });
   const bad = !f.title.trim() || f.end <= f.start;
+  const txs = item.txs || [];
   return (<Modal title={item.id ? 'Sửa công việc' : 'Thêm công việc'} onClose={onClose}>
     <Field l="Tên việc"><input value={f.title} onChange={e => set('title', e.target.value)} placeholder="VD: Học React" autoFocus /></Field>
     <div className="grid2"><Field l="Bắt đầu (24h)"><TimeInput value={f.start} onChange={v => set('start', v)} /></Field><Field l="Kết thúc (24h)"><TimeInput value={f.end} onChange={v => set('end', v)} /></Field></div>
@@ -145,16 +150,48 @@ function TaskForm({ item, onSave, onClose, onDel }) {
       <Field l="Ưu tiên"><select value={f.pri} onChange={e => set('pri', e.target.value)}>{PRI.map(c => <option key={c}>{c}</option>)}</select></Field>
       <Field l="Trạng thái"><select value={f.status} onChange={e => set('status', e.target.value)}>{Object.entries(ST).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field></div>
       <Field l="Ghi chú"><textarea rows="2" value={f.note} onChange={e => set('note', e.target.value)} /></Field></>}
+    {item.id && (
+      <div className="card" style={{ padding: 12, background: 'var(--card2)', display: 'flex', flexDirection: 'column', gap: 6, borderRadius: 14 }}>
+        <div className="row between s">
+          <b>💰 Khoản thu / chi gắn với việc này</b>
+          <span className="mut">{txs.length ? `${txs.length} khoản` : 'Chưa có'}</span>
+        </div>
+        {txs.length ? (
+          <div className="col" style={{ gap: 6 }}>
+            {txs.map(x => (
+              <div key={x.id} className="row between s" style={{ padding: '4px 0', borderBottom: '1px solid var(--line)' }}>
+                <div>
+                  <span>{x.type === 'income' ? '↗ Thu' : '↘ Chi'}: <b>{x.note || x.grp || 'Giao dịch'}</b></span>
+                  <small className="mut">{x.grp} · {x.date.split('-').reverse().join('/')}</small>
+                </div>
+                <b style={{ color: x.type === 'income' ? 'var(--ok)' : 'var(--warn)' }}>
+                  {x.type === 'income' ? '+' : '−'}{money(x.amount)}
+                </b>
+              </div>
+            ))}
+            <div className="row between s" style={{ paddingTop: 4 }}>
+              <b>Tổng chênh lệch</b>
+              <b style={{ color: txs.reduce((a, x) => a + (x.type === 'income' ? x.amount : -x.amount), 0) >= 0 ? 'var(--ok)' : 'var(--warn)' }}>
+                {money(txs.reduce((a, x) => a + (x.type === 'income' ? x.amount : -x.amount), 0))}
+              </b>
+            </div>
+          </div>
+        ) : (
+          <p className="mut s">Chưa có khoản thu/chi nào gắn với việc này.</p>
+        )}
+      </div>
+    )}
     {f.end <= f.start && <p className="err">Giờ kết thúc phải sau giờ bắt đầu</p>}
-    <button className="btn" disabled={bad} onClick={() => onSave({ ...f, id: f.id || uid(), title: f.title.trim() })}>Lưu</button>
+    <button className="btn" disabled={bad} onClick={() => { const { txs: _tx, ...clean } = f; onSave({ ...clean, id: f.id || uid(), title: f.title.trim() }); }}>Lưu</button>
     {item.id && <button className="btn out dng" onClick={() => onDel(item.id)}>🗑 Xóa việc này</button>}</Modal>);
 }
 function TxForm({ item, onSave, onClose }) {
-  const [f, setF] = useState(item), [nw, setNw] = useState(''), isNew = f.grp === '__new', set = (k, v) => setF({ ...f, [k]: v });
+  const [f, setF] = useState({ autoGoal: true, goalId: '', ...item }), [nw, setNw] = useState(''), isNew = f.grp === '__new', set = (k, v) => setF({ ...f, [k]: v });
   const opts = item.allTasks.filter(t => t.date === f.date).sort((a, b) => a.start.localeCompare(b.start));
   const pick = id => { const k = item.allTasks.find(x => x.id === id), g = k && (k.cat === 'Bài tập' ? 'Học tập' : k.cat); setF({ ...f, taskId: id, grp: g && item.groups.includes(g) ? g : f.grp }); };
   const gname = isNew ? (item.groups.find(x => x.toLowerCase() === nw.trim().toLowerCase()) || nw.trim()) : f.grp;
   const chip = ([n, g]) => setF({ ...f, note: n, grp: item.groups.includes(g) ? g : f.grp });
+  const hasGoals = item.goals && item.goals.length > 0;
   return (<Modal title={item.id ? 'Sửa giao dịch' : 'Thêm giao dịch'} onClose={onClose}>
     <div className="seg">{['expense', 'income'].map(t => <button key={t} className={f.type === t ? 'on' : ''} onClick={() => set('type', t)}>{t === 'income' ? 'Thu nhập' : 'Chi tiêu'}</button>)}</div>
     <Field l="Số tiền (đ)"><MoneyInput value={f.amount} onChange={v => set('amount', v)} placeholder="0" autoFocus /></Field>
@@ -163,10 +200,42 @@ function TxForm({ item, onSave, onClose }) {
     <div className="chips2">{CHIPS[f.type].map(c => <button key={c[0]} className="chip2" onClick={() => chip(c)}>{c[0]}</button>)}</div>
     <Field l="Nhóm"><select value={f.grp} onChange={e => set('grp', e.target.value)}>{item.groups.map(g => <option key={g}>{g}</option>)}<option value="__new">＋ Tạo nhóm mới…</option></select></Field>
     {isNew && <Field l="Tên nhóm mới"><input value={nw} onChange={e => setNw(e.target.value)} placeholder="VD: Du lịch" autoFocus /></Field>}
+    <div className="card" style={{ padding: '10px 12px', background: 'var(--card2)', borderRadius: 14 }}>
+      <label className="row gap s" style={{ cursor: 'pointer', userSelect: 'none' }}>
+        <input
+          type="checkbox"
+          style={{ width: 'auto', accentColor: 'var(--acc)' }}
+          checked={f.autoGoal !== false}
+          onChange={e => set('autoGoal', e.target.checked)}
+        />
+        <b>🎯 Tự động cập nhật vào mục tiêu</b>
+      </label>
+      {f.autoGoal !== false && hasGoals && (
+        <div style={{ marginTop: 8 }}>
+          <select
+            value={f.goalId || ''}
+            onChange={e => set('goalId', e.target.value)}
+            style={{ fontSize: '.85rem', padding: '6px 10px' }}
+          >
+            <option value="">Tất cả mục tiêu tiền (theo mức ưu tiên)</option>
+            {item.goals.map(g => (
+              <option key={g.id} value={g.id}>
+                {g.title} ({money(g.now)} / {money(g.target)})
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {f.autoGoal !== false && !hasGoals && (
+        <p className="mut s" style={{ marginTop: 4 }}>
+          Khoản này sẽ tự động cập nhật khi bạn tạo mục tiêu tiền (đ).
+        </p>
+      )}
+    </div>
     {opts.length > 0 && <Field l="Việc liên quan (tuỳ chọn)"><select value={f.taskId} onChange={e => pick(e.target.value)}><option value="">Không gắn việc</option>{opts.map(t => <option key={t.id} value={t.id}>{t.start} · {t.title}</option>)}</select></Field>}
     {opts.length > 0 && <p className="mut s">Gắn với việc: khoản này chỉ được tính (và cập nhật mục tiêu) khi việc hoàn thành. Không gắn việc: tính ngay.</p>}
     {item.id ? <Field l="Ngày"><input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value, taskId: '' })} /></Field> : f.date !== today() && <p className="mut s">Ghi cho ngày {f.date.split('-').reverse().join('/')}</p>}
-    <button className="btn" disabled={!(+f.amount > 0) || !gname} onClick={() => { const { allTasks, groups, ...r } = f, k = allTasks.find(x => x.id === f.taskId); onSave({ ...r, id: f.id || uid(), amount: +f.amount, tk: k ? k.title : '', grp: gname }); }}>Lưu</button></Modal>);
+    <button className="btn" disabled={!(+f.amount > 0) || !gname} onClick={() => { const { allTasks, groups, goals, ...r } = f, k = allTasks.find(x => x.id === f.taskId); onSave({ ...r, id: f.id || uid(), amount: +f.amount, tk: k ? k.title : '', grp: gname, autoGoal: f.autoGoal !== false, goalId: f.autoGoal !== false ? f.goalId || '' : '' }); }}>Lưu</button></Modal>);
 }
 function TxList({ db, type, onClose, onAdd, onEdit, onDel }) {
   const list = db.txs.filter(x => x.date === today() && x.type === type), tot = list.filter(x => isEff(db, x)).reduce((a, x) => a + x.amount, 0), inc = type === 'income', pend = list.some(x => !isEff(db, x));
@@ -440,8 +509,9 @@ function Summary({ db, rg }) {
   return (<div className="card sum"><h3>📋 Tổng kết {per}</h3>
     <div className="sum3"><div><small>Thu nhập</small><b style={{ color: 'var(--ok)' }}>{money(inc)}</b></div><div><small>Chi tiêu</small><b style={{ color: 'var(--warn)' }}>{money(exp)}</b></div><div><small>Số dư</small><b style={{ color: inc - exp >= 0 ? 'var(--ok)' : 'var(--warn)' }}>{money(inc - exp)}</b></div></div>
     <div className="sumrow"><span className="mut">Nhóm chi nhiều nhất</span><b>{top ? `${top[0]} (${money(top[1])})` : '—'}</b></div>
-    <div className="sumrow"><span className="mut">Hoàn thành việc</span><b>{tk.length ? rate + '%' : '—'}</b></div>
-    {(bud > 0 || plan > 0) && <div className="sumrow"><span className="mut">Dự tính chi / thu</span><b>{money(bud)} / {money(plan)}</b></div>}
+    <div className="sumrow"><span className="mut">Chi thực tế / Chi dự tính</span><b>{money(exp)}{bud > 0 ? ' / ' + money(bud) : ' (chưa đặt)'}</b></div>
+    <div className="sumrow"><span className="mut">Thu thực tế / Thu dự tính</span><b>{money(inc)}{plan > 0 ? ' / ' + money(plan) : ' (chưa đặt)'}</b></div>
+    <div className="sumrow"><span className="mut">Tổng số tiền thu được</span><b style={{ color: inc - exp >= 0 ? 'var(--ok)' : 'var(--warn)' }}>{(inc - exp >= 0 ? '+' : '−') + dots(Math.abs(inc - exp))} VND</b></div>
     <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></div>);
 }
 
@@ -483,8 +553,28 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
   const flash = (msg, undo) => { clearTimeout(tt.current); setToast({ msg, undo }); tt.current = setTimeout(() => setToast(null), 5000); };
   const del = (k, id) => { const idx = db[k].findIndex(x => x.id === id); if (idx < 0) return; const item = db[k][idx]; setDb(d => ({ ...d, [k]: d[k].filter(x => x.id !== id) }));
     flash('Đã xóa', () => { setDb(d => { const a = [...d[k]]; a.splice(Math.min(idx, a.length), 0, item); return { ...d, [k]: a }; }); setToast(null); }); };
-    const openTask = it => setModal({ k: 'task', it: it.id ? it : { title: '', date: today(), start: '09:00', end: '10:00', cat: 'Học tập', pri: 'Trung bình', note: '', status: 'todo', ...it } });
-  const openTx = (type, it) => { const gl = db.groups.map(g => g.name); setModal({ k: 'tx', it: { type, amount: '', date: today(), note: '', taskId: '', ...it, grp: gl.includes(it?.grp) ? it.grp : 'Khác', allTasks: db.tasks, groups: gl } }); };
+  const openTask = it => setModal({ k: 'task', it: it.id ? { ...it, txs: db.txs.filter(x => x.taskId === it.id) } : { title: '', date: today(), start: '09:00', end: '10:00', cat: 'Học tập', pri: 'Trung bình', note: '', status: 'todo', ...it, txs: [] } });
+  const openTx = (type, it) => {
+    const gl = db.groups.map(g => g.name);
+    const moneyGoals = db.goals.filter(g => g.unit === 'đ').map(g => ({ ...g, now: goalNow(db, g) }));
+    setModal({
+      k: 'tx',
+      it: {
+        type,
+        amount: '',
+        date: today(),
+        note: '',
+        taskId: '',
+        autoGoal: true,
+        goalId: '',
+        ...it,
+        grp: gl.includes(it?.grp) ? it.grp : 'Khác',
+        allTasks: db.tasks,
+        groups: gl,
+        goals: moneyGoals
+      }
+    });
+  };
   const openGoal = it => setModal({ k: 'goal', it: it.id ? { ...it, current: goalNow(db, it), asum: allocSum(db, it.id) } : { title: '', current: 0, target: '', unit: 'đ', pri: 'Trung bình', auto: true, asum: 0 } });
   const openList = type => setModal({ k: 'list', type });
   const openProfile = () => setModal({ k: 'profile' });
@@ -502,7 +592,17 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
     setDb(d => {
       const old = d.txs.find(x => x.id === t.id), signed = x => x.type === 'income' ? x.amount : -x.amount, task = t.taskId && d.tasks.find(k => k.id === t.taskId);
       const eff = !task || task.status === 'done', { alloc: _o, ...base } = t;
-      const alloc = eff ? (old && old.alloc && signed(old) === signed(t) ? old.alloc : splitAlloc({ ...d, txs: d.txs.filter(x => x.id !== t.id) }, signed(t))) : null, nt = alloc ? { ...base, alloc } : base;
+      let alloc = null;
+      if (eff && t.autoGoal !== false) {
+        if (t.goalId) {
+          alloc = { [t.goalId]: signed(t) };
+        } else {
+          alloc = old && old.alloc && signed(old) === signed(t) && !old.goalId
+            ? old.alloc
+            : splitAlloc({ ...d, txs: d.txs.filter(x => x.id !== t.id) }, signed(t));
+        }
+      }
+      const nt = alloc ? { ...base, alloc } : { ...base, alloc: null };
       const groups = d.groups.some(g => g.name === t.grp) ? d.groups : [...d.groups, { name: t.grp, share: .1, color: PAL[d.groups.length % PAL.length] }];
       return { ...d, groups, txs: old ? d.txs.map(x => x.id === t.id ? nt : x) : [...d.txs, nt] };
     });
@@ -510,9 +610,10 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
     setModal(null);
   };
   const saveTask = t => { // lưu việc; nếu đổi trạng thái hoàn thành thì cập nhật mục tiêu
-    setDb(d => { const old = d.tasks.find(x => x.id === t.id), nd = { ...d, tasks: old ? d.tasks.map(x => x.id === t.id ? t : x) : [...d.tasks, t] }, was = !!old && old.status === 'done', now = t.status === 'done';
-      return was === now ? nd : { ...nd, txs: retarget(nd, t.id, now) }; });
-    flash(`Đã lưu: "${t.title}"`);
+    const { txs: _tx, ...clean } = t;
+    setDb(d => { const old = d.tasks.find(x => x.id === clean.id), nd = { ...d, tasks: old ? d.tasks.map(x => x.id === clean.id ? clean : x) : [...d.tasks, clean] }, was = !!old && old.status === 'done', now = clean.status === 'done';
+      return was === now ? nd : { ...nd, txs: retarget(nd, clean.id, now) }; });
+    flash(`Đã lưu: "${clean.title}"`);
     setModal(null);
   };
   const delTask = id => { const t = db.tasks.find(x => x.id === id); if (!t) return;
