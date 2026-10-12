@@ -342,8 +342,8 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, imp
     <span className={'dn ' + (d === today() ? 'now' : '')}>{+d.slice(8)}</span>
     <span className="bars">{dayTasks(d).slice(0, 3).map(x => <i key={x.id} style={{ background: x.pri === 'Cao' ? 'var(--warn)' : CC[x.cat], opacity: x.status === 'done' ? .4 : 1 }} />)}</span></button>;
   return (<div className="page">
-    <div className="row between wrap"><h2 className="desk">Lịch tuần</h2><h2 className="mob ttl" onClick={() => setPick(true)}>Tháng {+sel.slice(5, 7)}, {sel.slice(0, 4)} ▾</h2>
-      <div className="row gap"><button className="btn sm out" onClick={() => go(-1)}>←</button><button className="btn sm out" onClick={() => jump(today())}>Hôm nay</button><button className="btn sm out" onClick={() => go(1)}>→</button><button className="btn sm out" onClick={() => setPick(true)}>📅 Chọn ngày</button>
+    <div className="row between wrap"><h2 className="ttl" onClick={() => setPick(true)} title="Bấm để chọn ngày/tháng">Tháng {+sel.slice(5, 7)}, {sel.slice(0, 4)} ▾</h2>
+      <div className="row gap"><button className="btn sm out" onClick={() => go(-1)} aria-label="Trước">←</button><button className="btn sm out" onClick={() => jump(today())}>Hôm nay</button><button className="btn sm out" onClick={() => go(1)} aria-label="Sau">→</button>
         <button className="btn sm desk" onClick={() => openTask({ date: sel })}>+ Thêm việc</button></div></div>
     <p className="mut s desk">{days[0].split('-').reverse().join('/')} – {days[6].split('-').reverse().join('/')}</p>
     <div className="row gap wrap">

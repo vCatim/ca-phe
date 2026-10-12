@@ -46,7 +46,7 @@ main{flex:1;min-width:0;padding:20px 28px 40px;max-width:1200px;margin:0 auto}
 .tx{display:flex;align-items:center;gap:10px;padding:12px 14px}.tic{width:34px;height:34px;border-radius:50%;background:var(--card2);display:grid;place-items:center;color:var(--acc)}
 .goal{display:flex;flex-direction:column;gap:6px}
 .wk{padding:0;overflow:hidden}.wkh,.wkb{display:grid;grid-template-columns:52px repeat(7,1fr)}.wkh div{text-align:center;padding:10px 0;border-left:1px solid var(--line);color:var(--mut);font-size:.85rem}.wkh .tdy{color:var(--acc);font-weight:700}
-.wkh{border-bottom:1px solid var(--line)}.hrs span{display:block;font-size:.7rem;color:var(--mut);padding:2px 6px}
+.wkh{border-bottom:1px solid var(--line)}.hrs span{display:block;font-size:.72rem;color:var(--mut)}
 .dcol{position:relative;border-left:1px solid var(--line);background-image:linear-gradient(var(--line) 1px,transparent 1px)}
 .blk{position:absolute;left:3px;right:3px;border-radius:10px;padding:4px 7px;background:color-mix(in srgb,var(--c) 28%,var(--card));border-left:4px solid var(--c);overflow:hidden;cursor:pointer;font-size:.75rem;transition:.2s}.blk:hover{transform:scale(1.03);z-index:2}
 .blk.hp{box-shadow:inset 0 0 0 1.5px var(--warn)}.blk.done{opacity:.5}.blk small{font-size:.68rem}
@@ -127,7 +127,7 @@ input,select,textarea{background:var(--bg);border:1px solid var(--line);border-r
 
 /* Lịch tuần 24 giờ: khung cuộn, nhãn giờ nằm ngay trên vạch (không ghi 00:00 và 24:00) */
 .wkscroll{max-height:70vh;overflow-y:auto}.wkb{border-bottom:1px solid var(--line)}
-.hrs span{padding:0 6px;line-height:1;transform:translateY(-50%)}
+.hrs span{padding:0 6px;line-height:1;transform:translateY(-5px)}
 .ttl{cursor:pointer;display:inline-block}
 .pend{opacity:.55}
 .pri{padding:3px 10px;border-radius:999px;font-size:.75rem;border:1px solid var(--line);color:var(--mut);transition:.2s}.pri.p3{color:var(--warn);border-color:var(--warn)}.pri.p2{color:var(--acc);border-color:var(--acc)}.pri:active{transform:scale(.95)}
