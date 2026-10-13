@@ -53,6 +53,13 @@ const loadDb = id => upgrade(rd(ACC(id)) || seed());
 const LogoIcon = ({ s = 30 }) => (<svg viewBox="0 0 48 48" width={s} height={s} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
   <path d="M10 20h24v10a10 10 0 0 1-10 10h-4a10 10 0 0 1-10-10z" fill="currentColor" fillOpacity=".2" /><path d="M34 22h3a5 5 0 0 1 0 10h-4" />
   <path className="steam" d="M16 8c-2 2 2 4 0 7M23 6c-2 2 2 4 0 8M30 8c-2 2 2 4 0 7" /><path d="M8 44h28" /></svg>);
+const TargetIcon = ({ s = 22, color = 'var(--acc)' }) => (
+  <svg viewBox="0 0 24 24" width={s} height={s} fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: 'middle', flexShrink: 0 }}>
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="6" />
+    <circle cx="12" cy="12" r="2" fill={color} />
+  </svg>
+);
 // Thu/chi "hiệu lực": không gắn việc (tính ngay) hoặc gắn với việc ĐÃ hoàn thành. Khoản gắn việc chưa xong thì chờ.
 const isEff = (db, x) => { const t = x.taskId && db.tasks.find(k => k.id === x.taskId); return !t || t.status === 'done'; };
 const PRIW = { 'Cao': 3, 'Trung bình': 2, 'Thấp': 1 }, goalPri = g => PRIW[g.pri] ? g.pri : 'Trung bình';
@@ -94,7 +101,8 @@ const Ring = ({ pct, size = 120 }) => {
     <circle cx="60" cy="60" r={r} fill="none" stroke="var(--line)" strokeWidth="11" />
     <circle cx="60" cy="60" r={r} fill="none" stroke={pct > 100 ? 'var(--warn)' : 'var(--acc)'} strokeWidth="11" strokeLinecap="round"
       strokeDasharray={`${C * p / 100} ${C}`} transform="rotate(-90 60 60)" style={{ transition: 'stroke-dasharray .8s cubic-bezier(.2,.8,.2,1)' }} />
-    <text x="60" y="66" textAnchor="middle" fill="var(--tx)" fontSize="22" fontWeight="700">{Math.round(pct)}%</text>
+    <circle cx="60" cy="8" r="4.5" fill="var(--acc)" />
+    <text x="60" y="67" textAnchor="middle" fill="var(--tx)" fontSize="23" fontWeight="700" fontFamily="'Playfair Display', Georgia, serif">{Math.round(pct)}%</text>
   </svg>);
 };
 const Donut = ({ data }) => {
@@ -308,9 +316,10 @@ function Today({ db, openTx, openTask, openList, openProfile, toggle, delTask })
   const dn = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 864e5);
   return (<div className="page stg">
     <div className="banner st" style={{ '--n': 0 }} onClick={openProfile}><div className="bn-alt" aria-hidden="true" />
+      <small>{new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</small>
       <Hop name={p.name} /><p>“{QUOTES[dn % QUOTES.length]}”</p><span className="chip">👤 Tài khoản <i>›</i></span></div>
 
-    {/* Chọn ngày: gọn một hàng, không còn nhãn Quá khứ / Tương lai */}
+    {/* Chọn ngày: gọn một hàng, giữ nguyên đầy đủ tính năng */}
     <div className="dnav st" style={{ '--n': 1 }}>
       <button className="dnb" onClick={() => go(addDays(curDate, -1))} aria-label="Ngày trước">‹</button>
       <button className="dpick" onClick={() => setPick(true)} aria-label="Chọn ngày khác">
@@ -322,28 +331,47 @@ function Today({ db, openTx, openTask, openList, openProfile, toggle, delTask })
 
     {/* key={curDate}: đổi ngày thì phần thân trượt vào theo chiều bấm */}
     <div key={curDate} className={'dbody ' + (dir ? 'dsl dsl-' + dir : 'st')} style={{ '--n': 2 }}>
-      <div className="three">
-        <Stat l="Việc đã xong" v={`${done}/${tasks.length}`} />
-        <Stat l="Thu" v={money(inc)} c="var(--ok)" onClick={() => openList('income', curDate)} />
-        <Stat l="Chi" v={money(exp)} c="var(--warn)" onClick={() => openList('expense', curDate)} />
+      {/* Khối 1: Thẻ ngân sách toàn chiều ngang */}
+      {p.budget
+        ? <div className="card row gap wrap">
+            <Ring pct={exp / dayBudget * 100} size={110} />
+            <div className="grow">
+              <small className="mut">{isToday ? 'Ngân sách hôm nay' : `Ngân sách ngày (${dmy})`}</small>
+              <h2>{money(exp)} <span className="mut">/ {money(dayBudget)}</span></h2>
+              <p className="mut s">{exp <= dayBudget ? `Còn ${money(dayBudget - exp)} có thể chi` : `Vượt ${money(exp - dayBudget)}`}</p>
+            </div>
+          </div>
+        : <div className="card row between gap">
+            <div>
+              <small className="mut">{isToday ? 'Chi hôm nay' : `Chi ngày ${dmy}`}</small>
+              <h2>{money(exp)}</h2>
+              <p className="mut s">Bạn chưa đặt ngân sách tháng.</p>
+            </div>
+            <button className="btn sm out" onClick={openProfile}>Đặt ngân sách</button>
+          </div>}
+
+      {/* Khối 2: Hai nút hành động full chiều rộng trong một thẻ riêng */}
+      <div className="card col gap">
+        <button className="btn out" onClick={() => openTx('expense', { date: curDate })}>+ Chi tiêu</button>
+        <button className="btn" onClick={() => openTx('income', { date: curDate })}>+ Thu nhập</button>
       </div>
 
-      <div className="cols tcols">
-        <section className="col gap">
-          <div className="row between"><h3>Việc cần làm</h3><button className="btn sm" onClick={() => openTask({ date: curDate })}>+ Thêm</button></div>
-          <div className="col gap">{tasks.length
-            ? tasks.map((x, i) => <div key={x.id} className="trow" style={{ '--n': i }}><TaskRow t={x} onToggle={toggle} onEdit={openTask} onDel={delTask} /></div>)
-            : <div className="card empty"><span className="big">📝</span><p>Chưa có việc nào.</p><button className="btn sm" onClick={() => openTask({ date: curDate })}>+ Thêm việc</button></div>}</div>
-        </section>
+      {/* Khối 3: Ba thẻ thống kê */}
+      <div className="three">
+        <Stat l="Việc đã xong" v={`${done}/${tasks.length}`} />
+        <Stat l={isToday ? 'Thu hôm nay' : 'Thu ngày này'} v={money(inc)} c="var(--ok)" onClick={() => openList('income', curDate)} />
+        <Stat l={isToday ? 'Chi hôm nay' : 'Chi ngày này'} v={money(exp)} c="var(--warn)" onClick={() => openList('expense', curDate)} />
+      </div>
 
-        <aside className="col gap">
-          {p.budget
-            ? <div className="card row gap wrap"><Ring pct={exp / dayBudget * 100} size={104} />
-                <div className="grow"><small className="mut">Ngân sách ngày</small><h2>{money(exp)} <span className="mut">/ {money(dayBudget)}</span></h2>
-                  <p className="mut s">{exp <= dayBudget ? `Còn ${money(dayBudget - exp)} có thể chi` : `Vượt ${money(exp - dayBudget)}`}</p></div></div>
-            : <div className="card row between gap"><div><b>Chưa đặt ngân sách</b><small>Đặt để theo dõi chi tiêu mỗi ngày</small></div><button className="btn sm out" onClick={openProfile}>Đặt</button></div>}
-          <div className="grid2"><button className="btn out" onClick={() => openTx('expense', { date: curDate })}>+ Chi tiêu</button><button className="btn" onClick={() => openTx('income', { date: curDate })}>+ Thu nhập</button></div>
-        </aside>
+      {/* Khối 4: Việc cần làm */}
+      <div className="row between">
+        <h3>{isToday ? 'Việc cần làm hôm nay' : `Việc cần làm (${dmy})`}</h3>
+        <button className="btn sm" onClick={() => openTask({ date: curDate })}>+ Thêm</button>
+      </div>
+      <div className="col gap">
+        {tasks.length
+          ? tasks.map((x, i) => <div key={x.id} className="trow" style={{ '--n': i }}><TaskRow t={x} onToggle={toggle} onEdit={openTask} onDel={delTask} /></div>)
+          : <div className="card empty"><span className="big">📝</span><p>{isToday ? 'Hôm nay chưa có việc nào.' : `Ngày ${dmy} chưa có việc nào.`}</p><button className="btn sm" onClick={() => openTask({ date: curDate })}>+ Thêm việc</button></div>}
       </div>
     </div>
     {pick && <DatePicker value={curDate} tasks={db.tasks} onPick={d => { go(d); setPick(false); }} onClose={() => setPick(false)} />}</div>);
@@ -558,12 +586,30 @@ function Goals({ db, openGoal, delGoal, bump, toggleAuto, cyclePri }) {
   return (<div className="page"><div className="row between"><h2>Mục tiêu</h2><button className="btn sm" onClick={() => openGoal({})}>+ Mục tiêu mới</button></div>
     {nAuto > 1 && <p className="mut s">Khi có nhiều mục tiêu bật tự động, thu/chi được chia theo mức ưu tiên (Cao 3 : Trung bình 2 : Thấp 1). Thu nhập chỉ chia cho mục tiêu chưa đạt.</p>}
     <div className="cols3">{list.map(g => { const now = goalNow(db, g), pc = now / g.target * 100, isMoney = g.unit === 'đ'; return <div key={g.id} className="card goal">
-      <div className="row between"><b>🎯 {g.title}</b><span><button className="ib" onClick={() => openGoal(g)}>✎</button><button className="ib" onClick={() => delGoal(g.id)}>🗑</button></span></div>
-      <h2>{fmt(g, now)} <span className="mut s">/ {fmt(g, g.target)}{g.unit !== 'đ' ? ' ' + g.unit : ''}</span></h2><Bar pct={pc} color={pc >= 100 ? 'var(--ok)' : undefined} />
-      <div className="row between s"><span className="mut">{Math.round(pc)}% hoàn thành</span><button className={'pri p' + PRIW[goalPri(g)]} onClick={() => cyclePri(g)} title="Bấm để đổi mức ưu tiên">Ưu tiên: {goalPri(g)}</button></div>
-      {isMoney ? <button className={'sw' + (g.auto ? ' on' : '')} onClick={() => toggleAuto(g)}><i /><span>Tự động cập nhật</span></button>
-        : <button className="btn sm out" onClick={() => bump(g)}>+ 1 {g.unit}</button>}</div>; })}</div>
-    {!db.goals.length && <div className="card empty"><span className="big">🎯</span><p>Chưa có mục tiêu nào.</p><button className="btn sm" onClick={() => openGoal({})}>+ Đặt mục tiêu đầu tiên</button></div>}</div>);
+      <div className="goal-top">
+        <div className="goal-title-wrap">
+          <TargetIcon s={22} color="var(--acc)" />
+          <b className="goal-title-text">{g.title}</b>
+        </div>
+        <div className="goal-actions">
+          <button className="ib" onClick={() => openGoal(g)} title="Sửa">✎</button>
+          <button className="ib" onClick={() => delGoal(g.id)} title="Xóa">🗑</button>
+        </div>
+      </div>
+      <div className="goal-num-row">
+        <h2>{fmt(g, now)} <span className="mut s">/ {fmt(g, g.target)}{g.unit !== 'đ' ? ' ' + g.unit : ''}</span></h2>
+      </div>
+      <Bar pct={pc} color={pc >= 100 ? 'var(--ok)' : undefined} />
+      <div className="row between s goal-meta-row">
+        <span className="mut">{Math.round(pc)}% hoàn thành</span>
+        <button className={'pri p' + PRIW[goalPri(g)]} onClick={() => cyclePri(g)} title="Bấm để đổi mức ưu tiên">Ưu tiên: {goalPri(g)}</button>
+      </div>
+      <div className="goal-foot">
+        {isMoney ? <button className={'sw' + (g.auto ? ' on' : '')} onClick={() => toggleAuto(g)}><i /><span>Tự động cập nhật</span></button>
+          : <button className="btn sm out goal-bump-btn" onClick={() => bump(g)}>+ 1 {g.unit}</button>}
+      </div>
+    </div>; })}</div>
+    {!db.goals.length && <div className="card empty"><TargetIcon s={48} color="var(--mut)" /><p>Chưa có mục tiêu nào.</p><button className="btn sm" onClick={() => openGoal({})}>+ Đặt mục tiêu đầu tiên</button></div>}</div>);
 }
 
 // Tổng kết tuần này / tháng này (độc lập với bộ lọc phía trên)
