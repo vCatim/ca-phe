@@ -126,14 +126,24 @@ const Modal = ({ title, onClose, children }) => {
   );
 };
 
-const TaskRow = ({ t, onToggle, onEdit, onDel }) => (
-  <div className={'task ' + (t.status === 'done' ? 'done' : '')} style={{ '--c': CC[t.cat] }}>
-    <button className={'chk ' + (t.status === 'done' ? 'on' : '')} onClick={() => onToggle(t)}>{t.status === 'done' ? '✓' : ''}</button>
-    <div className="grow"><b>{t.title}</b><small>{t.start}–{t.end}{t.note ? ' · ' + t.note : ''}</small></div>
-    <span className="tag cat" style={{ '--c': CC[t.cat] }}>{t.cat}</span>
-    {t.pri === 'Cao' && <span className="tag hi">Cao</span>}
-    <button className="ib" onClick={() => onEdit(t)}>✎</button><button className="ib" onClick={() => onDel(t.id)}>🗑</button>
-  </div>);
+const TaskRow = ({ t, onToggle, onEdit, onDel }) => {
+  const isFuture = t.date > today();
+  return (
+    <div className={'task ' + (t.status === 'done' ? 'done' : '')} style={{ '--c': CC[t.cat] }}>
+      <button
+        className={'chk ' + (t.status === 'done' ? 'on' : '') + (isFuture ? ' dis' : '')}
+        onClick={() => onToggle(t)}
+        title={isFuture ? 'Không thể hoàn thành việc ở tương lai' : (t.status === 'done' ? 'Đã hoàn thành' : 'Đánh dấu hoàn thành')}
+      >
+        {t.status === 'done' ? '✓' : isFuture ? '🔒' : ''}
+      </button>
+      <div className="grow"><b>{t.title}</b><small>{t.start}–{t.end}{t.note ? ' · ' + t.note : ''}</small></div>
+      <span className="tag cat" style={{ '--c': CC[t.cat] }}>{t.cat}</span>
+      {t.pri === 'Cao' && <span className="tag hi">Cao</span>}
+      <button className="ib" onClick={() => onEdit(t)}>✎</button><button className="ib" onClick={() => onDel(t.id)}>🗑</button>
+    </div>
+  );
+};
 
 // ---------- Form thêm/sửa ----------
 function TaskForm({ item, onSave, onClose, onDel }) {
@@ -148,7 +158,7 @@ function TaskForm({ item, onSave, onClose, onDel }) {
     {more && <><div className="grid2"><Field l="Ngày"><input type="date" value={f.date} onChange={e => set('date', e.target.value)} /></Field>
       <Field l="Nhóm"><select value={f.cat} onChange={e => set('cat', e.target.value)}>{CATS.map(c => <option key={c}>{c}</option>)}</select></Field>
       <Field l="Ưu tiên"><select value={f.pri} onChange={e => set('pri', e.target.value)}>{PRI.map(c => <option key={c}>{c}</option>)}</select></Field>
-      <Field l="Trạng thái"><select value={f.status} onChange={e => set('status', e.target.value)}>{Object.entries(ST).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field></div>
+      <Field l="Trạng thái"><select value={f.status} onChange={e => set('status', e.target.value)}>{Object.entries(ST).map(([k, v]) => <option key={k} value={k} disabled={k === 'done' && f.date > today()}>{v}{k === 'done' && f.date > today() ? ' (chỉ mở khi đến ngày)' : ''}</option>)}</select></Field></div>
       <Field l="Ghi chú"><textarea rows="2" value={f.note} onChange={e => set('note', e.target.value)} /></Field></>}
     {item.id && (
       <div className="card" style={{ padding: 12, background: 'var(--card2)', display: 'flex', flexDirection: 'column', gap: 6, borderRadius: 14 }}>
@@ -237,11 +247,12 @@ function TxForm({ item, onSave, onClose }) {
     {item.id ? <Field l="Ngày"><input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value, taskId: '' })} /></Field> : f.date !== today() && <p className="mut s">Ghi cho ngày {f.date.split('-').reverse().join('/')}</p>}
     <button className="btn" disabled={!(+f.amount > 0) || !gname} onClick={() => { const { allTasks, groups, goals, ...r } = f, k = allTasks.find(x => x.id === f.taskId); onSave({ ...r, id: f.id || uid(), amount: +f.amount, tk: k ? k.title : '', grp: gname, autoGoal: f.autoGoal !== false, goalId: f.autoGoal !== false ? f.goalId || '' : '' }); }}>Lưu</button></Modal>);
 }
-function TxList({ db, type, onClose, onAdd, onEdit, onDel }) {
-  const list = db.txs.filter(x => x.date === today() && x.type === type), tot = list.filter(x => isEff(db, x)).reduce((a, x) => a + x.amount, 0), inc = type === 'income', pend = list.some(x => !isEff(db, x));
-  return (<Modal title={inc ? 'Thu nhập hôm nay' : 'Chi tiêu hôm nay'} onClose={onClose}>
+function TxList({ db, type, date, onClose, onAdd, onEdit, onDel }) {
+  const d = date || today(), isT = d === today();
+  const list = db.txs.filter(x => x.date === d && x.type === type), tot = list.filter(x => isEff(db, x)).reduce((a, x) => a + x.amount, 0), inc = type === 'income', pend = list.some(x => !isEff(db, x));
+  return (<Modal title={inc ? (isT ? 'Thu nhập hôm nay' : `Thu nhập ngày ${d.split('-').reverse().join('/')}`) : (isT ? 'Chi tiêu hôm nay' : `Chi tiêu ngày ${d.split('-').reverse().join('/')}`)} onClose={onClose}>
     {list.length ? list.map(x => <div key={x.id} className={'row gap tx2' + (isEff(db, x) ? '' : ' pend')}><div className="grow"><b>{x.note || tInfo(db.tasks, x).title}</b><small>{x.grp || 'Khác'} · 🔗 {tInfo(db.tasks, x).title}{isEff(db, x) ? '' : ' · ⏳ chờ hoàn thành việc'}</small></div>
-      <b style={{ color: inc ? 'var(--ok)' : 'var(--warn)' }}>{money(x.amount)}</b><button className="ib" onClick={() => onEdit(x)}>✎</button><button className="ib" onClick={() => onDel(x.id)}>🗑</button></div>) : <p className="mut">Hôm nay chưa có khoản nào.</p>}
+      <b style={{ color: inc ? 'var(--ok)' : 'var(--warn)' }}>{money(x.amount)}</b><button className="ib" onClick={() => onEdit(x)}>✎</button><button className="ib" onClick={() => onDel(x.id)}>🗑</button></div>) : <p className="mut">{isT ? 'Hôm nay chưa có khoản nào.' : 'Ngày này chưa có khoản nào.'}</p>}
     {pend && <p className="mut s">Khoản gắn với việc chưa hoàn thành chưa được tính vào tổng.</p>}
     <div className="row between"><b>Tổng (đã tính)</b><b>{money(tot)}</b></div><button className="btn" onClick={onAdd}>+ {inc ? 'Thu nhập' : 'Chi tiêu'}</button></Modal>);
 }
@@ -283,23 +294,73 @@ function Hop({ name }) {
   return <h1 className="hop" aria-label={`Chào ${name} ☕`}>{part('Chào ')}<span className="nm">{part(name)}</span>{part(' ☕')}</h1>;
 }
 function Today({ db, openTx, openTask, openList, openProfile, toggle, delTask }) {
-  const t = today(), p = db.profile, dayBudget = p.budget / 30;
-  const tasks = db.tasks.filter(x => x.date === t).sort((a, b) => a.start.localeCompare(b.start));
-  const tx = db.txs.filter(x => x.date === t && isEff(db, x)), exp = tx.filter(x => x.type === 'expense').reduce((a, x) => a + x.amount, 0), inc = tx.filter(x => x.type === 'income').reduce((a, x) => a + x.amount, 0);
+  const [curDate, setCurDate] = useState(today()), [pick, setPick] = useState(false);
+  const p = db.profile, dayBudget = p.budget / 30;
+  const isToday = curDate === today(), isPast = curDate < today(), isFuture = curDate > today();
+  const curD = new Date(curDate + 'T00:00');
+  const dateLabel = `${WD[curD.getDay()]}, ${curDate.split('-').reverse().join('/')}`;
+  const tasks = db.tasks.filter(x => x.date === curDate).sort((a, b) => a.start.localeCompare(b.start));
+  const tx = db.txs.filter(x => x.date === curDate && isEff(db, x));
+  const exp = tx.filter(x => x.type === 'expense').reduce((a, x) => a + x.amount, 0);
+  const inc = tx.filter(x => x.type === 'income').reduce((a, x) => a + x.amount, 0);
   const done = tasks.filter(x => x.status === 'done').length;
   const dn = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 864e5);
   return (<div className="page">
     <div className="banner" onClick={openProfile}><div className="bn-alt" aria-hidden="true" /><small>{new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</small>
       <Hop name={p.name} /><p>“{QUOTES[dn % QUOTES.length]}”</p><span className="chip">👤 Tài khoản <i>›</i></span></div>
+
+    {/* Thanh điều hướng ngày của Trang chính */}
+    <div className="card" style={{ padding: '10px 14px', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+      <div className="row gap" style={{ alignItems: 'center' }}>
+        <button className="btn sm out" onClick={() => setCurDate(addDays(curDate, -1))} title="Ngày trước">‹</button>
+        <button
+          className="btn sm out"
+          onClick={() => setPick(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', fontWeight: 600 }}
+          title="Bấm để chọn ngày cụ thể"
+        >
+          <span>📅</span>
+          <span>{dateLabel}</span>
+          <span style={{ fontSize: '.75rem', opacity: .7 }}>▾</span>
+        </button>
+        <button className="btn sm out" onClick={() => setCurDate(addDays(curDate, 1))} title="Ngày sau">›</button>
+      </div>
+      <div className="row gap" style={{ alignItems: 'center' }}>
+        {!isToday && (
+          <button
+            className="btn sm out"
+            onClick={() => setCurDate(today())}
+            style={{ borderColor: 'var(--acc)', color: 'var(--acc)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}
+          >
+            <span>↩</span> Về hôm nay
+          </button>
+        )}
+        <span
+          className="tag"
+          style={{
+            background: isToday ? 'color-mix(in srgb, var(--acc) 15%, transparent)' : isPast ? 'color-mix(in srgb, var(--k-proj) 15%, transparent)' : 'color-mix(in srgb, var(--warn) 15%, transparent)',
+            color: isToday ? 'var(--acc)' : isPast ? 'var(--k-proj)' : 'var(--warn)',
+            fontWeight: 600,
+            fontSize: '.78rem',
+            padding: '5px 12px',
+            borderRadius: 20
+          }}
+        >
+          {isToday ? 'Hôm nay' : isPast ? 'Quá khứ' : 'Tương lai'}
+        </span>
+      </div>
+    </div>
+
     <div className="cols">
       {p.budget ? <div className="card row gap"><Ring pct={exp / dayBudget * 100} />
-        <div><small className="mut">Ngân sách hôm nay</small><h2>{money(exp)} <span className="mut">/ {money(dayBudget)}</span></h2>
+        <div><small className="mut">{isToday ? 'Ngân sách hôm nay' : `Ngân sách ngày (${curDate.split('-').reverse().join('/')})`}</small><h2>{money(exp)} <span className="mut">/ {money(dayBudget)}</span></h2>
           <p className="mut s">{exp <= dayBudget ? `Còn ${money(dayBudget - exp)} có thể chi` : `Vượt ${money(exp - dayBudget)}`}</p></div></div>
-        : <div className="card"><small className="mut">Chi hôm nay</small><h2>{money(exp)}</h2><p className="mut s">Bạn chưa đặt ngân sách tháng.</p><button className="btn sm out" onClick={openProfile}>Đặt ngân sách</button></div>}
-      <div className="card col gap"><button className="btn out" onClick={() => openTx('expense')}>+ Chi tiêu</button><button className="btn" onClick={() => openTx('income')}>+ Thu nhập</button></div></div>
-    <div className="three"><Stat l="Việc đã xong" v={`${done}/${tasks.length}`} /><Stat l="Thu hôm nay" v={money(inc)} c="var(--ok)" onClick={() => openList('income')} /><Stat l="Chi hôm nay" v={money(exp)} c="var(--warn)" onClick={() => openList('expense')} /></div>
-    <div className="row between"><h3>Việc cần làm hôm nay</h3><button className="btn sm" onClick={() => openTask({ date: t })}>+ Thêm</button></div>
-    <div className="col gap">{tasks.length ? tasks.map(x => <TaskRow key={x.id} t={x} onToggle={toggle} onEdit={openTask} onDel={delTask} />) : <div className="card empty"><span className="big">📝</span><p>Hôm nay chưa có việc nào.</p><button className="btn sm" onClick={() => openTask({ date: t })}>+ Thêm việc đầu tiên</button></div>}</div></div>);
+        : <div className="card"><small className="mut">{isToday ? 'Chi hôm nay' : `Chi ngày ${curDate.split('-').reverse().join('/')}`}</small><h2>{money(exp)}</h2><p className="mut s">Bạn chưa đặt ngân sách tháng.</p><button className="btn sm out" onClick={openProfile}>Đặt ngân sách</button></div>}
+      <div className="card col gap"><button className="btn out" onClick={() => openTx('expense', { date: curDate })}>+ Chi tiêu</button><button className="btn" onClick={() => openTx('income', { date: curDate })}>+ Thu nhập</button></div></div>
+    <div className="three"><Stat l="Việc đã xong" v={`${done}/${tasks.length}`} /><Stat l={isToday ? "Thu hôm nay" : "Thu ngày này"} v={money(inc)} c="var(--ok)" onClick={() => openList('income', curDate)} /><Stat l={isToday ? "Chi hôm nay" : "Chi ngày này"} v={money(exp)} c="var(--warn)" onClick={() => openList('expense', curDate)} /></div>
+    <div className="row between"><h3>{isToday ? 'Việc cần làm hôm nay' : `Việc cần làm (${curDate.split('-').reverse().join('/')})`}</h3><button className="btn sm" onClick={() => openTask({ date: curDate })}>+ Thêm</button></div>
+    <div className="col gap">{tasks.length ? tasks.map(x => <TaskRow key={x.id} t={x} onToggle={toggle} onEdit={openTask} onDel={delTask} />) : <div className="card empty"><span className="big">📝</span><p>{isToday ? 'Hôm nay chưa có việc nào.' : `Ngày ${curDate.split('-').reverse().join('/')} chưa có việc nào.`}</p><button className="btn sm" onClick={() => openTask({ date: curDate })}>+ Thêm việc</button></div>}</div>
+    {pick && <DatePicker value={curDate} tasks={db.tasks} onPick={d => { setCurDate(d); setPick(false); }} onClose={() => setPick(false)} />}</div>);
 }
 
 // Đọc nội dung file .ics → danh sách việc (xuất ra để kiểm thử). Lịch lặp chỉ mở rộng ±6 tháng quanh `now`.
@@ -451,8 +512,8 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, imp
 }
 
 function Finance({ db, openTx, delTx, openGroups }) {
-  const [rg, setRg] = useState('month'), [all, setAll] = useState(false), [fm, setFm] = useState('day'), [fv, setFv] = useState(today()), p = db.profile, t = today(), scale = rg === 'week' ? 7 / 30 : 1, ws = wkStart(t);
-  const inR = d => rg === 'week' ? d >= ws && d <= addDays(ws, 6) : d.slice(0, 7) === t.slice(0, 7);
+  const [rg, setRg] = useState('month'), [all, setAll] = useState(false), [fm, setFm] = useState('day'), [fv, setFv] = useState(today()), p = db.profile, t = today(), scale = rg === 'today' ? 1 / 30 : rg === 'week' ? 7 / 30 : 1, ws = wkStart(t);
+  const inR = d => rg === 'today' ? d === t : rg === 'week' ? (d >= ws && d <= addDays(ws, 6)) : d.slice(0, 7) === t.slice(0, 7);
   const txs = db.txs.filter(x => inR(x.date) && isEff(db, x)).sort((a, b) => b.date.localeCompare(a.date));
   const sum = ty => txs.filter(x => x.type === ty).reduce((a, x) => a + x.amount, 0), inc = sum('income'), exp = sum('expense'), bud = p.budget * scale, usedPct = bud ? exp / bud * 100 : 0;
   const tw = db.groups.reduce((a, g) => a + g.share, 0), G = Object.fromEntries(db.groups.map(g => [g.name, [g.color, g.share / tw]]));
@@ -462,12 +523,39 @@ function Finance({ db, openTx, delTx, openGroups }) {
   const row = x => <div key={x.id} className={'card tx' + (isEff(db, x) ? '' : ' pend')}><span className="tic">{x.type === 'income' ? '↗' : '↘'}</span><div className="grow"><b>{x.note || tInfo(db.tasks, x).title}</b><small>{x.grp || 'Khác'} · 🔗 {tInfo(db.tasks, x).title} · {x.date.split('-').reverse().join('/')}{isEff(db, x) ? '' : ' · ⏳ chờ hoàn thành việc'}</small></div>
     <b style={{ color: x.type === 'income' ? 'var(--ok)' : 'var(--warn)' }}>{x.type === 'income' ? '+' : '−'}{money(x.amount)}</b><button className="ib" onClick={() => openTx(x.type, x)}>✎</button><button className="ib" onClick={() => delTx(x.id)}>🗑</button></div>;
   return (<div className="page">
-    <div className="row between wrap"><h2>Tài chính</h2><div className="row gap"><div className="seg">{[['week', 'Tuần này'], ['month', 'Tháng này']].map(([k, l]) => <button key={k} className={rg === k ? 'on' : ''} onClick={() => setRg(k)}>{l}</button>)}</div></div></div>
+    <div className="row between wrap"><h2>Tài chính</h2><div className="row gap"><div className="seg">{[['today', 'Hôm nay'], ['week', 'Tuần này'], ['month', 'Tháng này']].map(([k, l]) => <button key={k} className={rg === k ? 'on' : ''} onClick={() => setRg(k)}>{l}</button>)}</div></div></div>
     <div className="four"><Stat l="Thu nhập" v={money(inc)} c="var(--ok)" /><Stat l="Chi tiêu" v={money(exp)} c="var(--warn)" /><Stat l="Số dư" v={money(inc - exp)} c={inc - exp >= 0 ? 'var(--ok)' : 'var(--warn)'} /><Stat l="Ngân sách đã dùng" v={bud ? Math.round(usedPct) + '%' : '—'} /></div>
     <div className="cols">
-      <div className="card"><div className="row between"><h3>Chi tiêu theo nhóm việc</h3><button className="btn sm out" onClick={openGroups}>✎ Sửa nhóm</button></div><div className="row gap wrap" style={{ justifyContent: 'center' }}>
-        <Donut data={Object.keys(G).map(k => ({ k, v: by[k], c: G[k][0] }))} />
-        <div className="col" style={{ gap: 6 }}>{Object.keys(G).map(k => <span key={k} className="s"><i className="dot" style={{ background: G[k][0] }} /> {k}: {money(by[k])}</span>)}</div></div></div>
+      <div className="card">
+        <div className="row between" style={{ alignItems: 'center', marginBottom: 10 }}>
+          <h3 style={{ margin: 0 }}>Chi tiêu theo nhóm việc</h3>
+          <button
+            onClick={openGroups}
+            title="Quản lý và chỉnh sửa nhóm việc"
+            style={{
+              background: 'var(--card2)',
+              border: '1px solid var(--line)',
+              color: 'var(--tx)',
+              fontSize: '.76rem',
+              fontWeight: 600,
+              padding: '3px 9px',
+              borderRadius: 8,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              opacity: .85,
+              transition: 'all .2s ease'
+            }}
+          >
+            <span>⚙</span> Sửa nhóm
+          </button>
+        </div>
+        <div className="row gap wrap" style={{ justifyContent: 'center' }}>
+          <Donut data={Object.keys(G).map(k => ({ k, v: by[k], c: G[k][0] }))} />
+          <div className="col" style={{ gap: 6 }}>{Object.keys(G).map(k => <span key={k} className="s"><i className="dot" style={{ background: G[k][0] }} /> {k}: {money(by[k])}</span>)}</div>
+        </div>
+      </div>
       <div className="card"><h3>Thực chi vs ngân sách (nhóm việc)</h3><div className="col gap">{Object.keys(G).map(k => { const b = p.budget * G[k][1] * scale; return <div key={k}><div className="row between s"><span>{k}</span><span className="mut">{money(by[k])}{b ? ' / ' + money(b) : ''}</span></div><Bar pct={b ? by[k] / b * 100 : 0} color={G[k][0]} /></div>; })}</div></div></div>
     <h3>Tổng kết</h3>
     <div className="cols2"><Summary db={db} rg="week" /><Summary db={db} rg="month" /></div>
@@ -545,7 +633,7 @@ function GroupsModal({ groups, onClose, onAdd, onRemove }) {
 }
 
 // ---------- 5) App gốc ----------
-const NAV = [['today', '☀️', 'Hôm nay'], ['cal', '📅', 'Lịch'], ['fin', '💰', 'Tài chính'], ['goal', '🎯', 'Mục tiêu']];
+const NAV = [['today', '🏠', 'Trang chính'], ['cal', '📅', 'Lịch'], ['fin', '💰', 'Tài chính'], ['goal', '🎯', 'Mục tiêu']];
 function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
   const [db, setDb] = useState(() => loadDb(id)), [page, setPage] = useState('today'), [modal, setModal] = useState(null), [clip, setClip] = useState(null), [toast, setToast] = useState(null), tt = useRef(null);
   useEffect(() => wr(ACC(id), db), [db]);
@@ -576,7 +664,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
     });
   };
   const openGoal = it => setModal({ k: 'goal', it: it.id ? { ...it, current: goalNow(db, it), asum: allocSum(db, it.id) } : { title: '', current: 0, target: '', unit: 'đ', pri: 'Trung bình', auto: true, asum: 0 } });
-  const openList = type => setModal({ k: 'list', type });
+  const openList = (type, date) => setModal({ k: 'list', type, date: date || today() });
   const openProfile = () => setModal({ k: 'profile' });
   const openGroups = () => setModal({ k: 'groups' });
   const importIcs = async (file, cat = 'Học tập') => {
@@ -611,6 +699,10 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
   };
   const saveTask = t => { // lưu việc; nếu đổi trạng thái hoàn thành thì cập nhật mục tiêu
     const { txs: _tx, ...clean } = t;
+    if (clean.date > today() && clean.status === 'done') {
+      clean.status = 'todo';
+      flash('⚠️ Việc ở tương lai không thể đánh dấu hoàn thành');
+    }
     setDb(d => { const old = d.tasks.find(x => x.id === clean.id), nd = { ...d, tasks: old ? d.tasks.map(x => x.id === clean.id ? clean : x) : [...d.tasks, clean] }, was = !!old && old.status === 'done', now = clean.status === 'done';
       return was === now ? nd : { ...nd, txs: retarget(nd, clean.id, now) }; });
     flash(`Đã lưu: "${clean.title}"`);
@@ -629,12 +721,16 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
     if (add.length) setDb(d => ({ ...d, tasks: [...d.tasks, ...add] })); return add.length;
   };
   const toggle = t => {
+    if (t.date > today()) {
+      flash('⚠️ Không thể đánh dấu hoàn thành việc ở tương lai!');
+      return;
+    }
     const done = t.status !== 'done', net = db.txs.filter(x => x.taskId === t.id).reduce((a, x) => a + (x.type === 'income' ? x.amount : -x.amount), 0);
     saveTask({ ...t, status: done ? 'done' : 'todo' });
-    const todayTasks = db.tasks.filter(x => x.date === today());
-    const remaining = todayTasks.filter(x => x.id !== t.id && x.status !== 'done').length;
-    if (done && remaining === 0 && todayTasks.length > 0) {
-      flash('🎉 Hoàn thành hết việc hôm nay! Tự thưởng một ly cà phê nhé ☕✨');
+    const curTasks = db.tasks.filter(x => x.date === t.date);
+    const remaining = curTasks.filter(x => x.id !== t.id && x.status !== 'done').length;
+    if (done && remaining === 0 && curTasks.length > 0) {
+      flash(t.date === today() ? '🎉 Hoàn thành hết việc hôm nay! Tự thưởng một ly cà phê nhé ☕✨' : `🎉 Hoàn thành hết việc ngày ${t.date.split('-').reverse().join('/')}!`);
     } else if (net && db.goals.some(g => g.auto && g.unit === 'đ')) {
       flash(`Mục tiêu: ${(done ? net : -net) > 0 ? '+' : '−'}${money(Math.abs(net))}`);
     }
@@ -659,7 +755,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
     {modal?.k === 'goal' && <GoalForm item={modal.it} onSave={g => upsert('goals', g)} onClose={() => setModal(null)} />}
     {modal?.k === 'profile' && <ProfileModal p={db.profile} counts={`${db.tasks.length} việc · ${db.txs.length} giao dịch · ${db.goals.length} mục tiêu`} onClose={() => setModal(null)} onSave={p => { setDb(d => ({ ...d, profile: p })); onRename(p.name); setModal(null); }} theme={theme} toggleTheme={toggleTheme} onLogout={onLogout} onDelete={onDelete} onReset={() => { setDb(d => ({ ...d, tasks: [], txs: [], goals: [] })); setModal(null); }} />}
     {modal?.k === 'groups' && <GroupsModal groups={db.groups} onClose={() => setModal(null)} onAdd={name => setDb(d => ({ ...d, groups: [...d.groups, { name, share: .1, color: PAL[d.groups.length % PAL.length] }] }))} onRemove={name => setDb(d => ({ ...d, groups: d.groups.filter(g => g.name !== name) }))} />}
-    {modal?.k === 'list' && <TxList db={db} type={modal.type} onClose={() => setModal(null)} onAdd={() => openTx(modal.type)} onEdit={x => openTx(x.type, x)} onDel={id => del('txs', id)} />}
+    {modal?.k === 'list' && <TxList db={db} type={modal.type} date={modal.date} onClose={() => setModal(null)} onAdd={() => openTx(modal.type, { date: modal.date || today() })} onEdit={x => openTx(x.type, x)} onDel={id => del('txs', id)} />}
   </div>);
 }
 // Gốc: quản lý tài khoản (đăng nhập lại / tạo mới) và giao diện sáng-tối
