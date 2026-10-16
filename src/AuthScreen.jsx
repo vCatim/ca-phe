@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { authService, isSupabaseConfigured } from './supabase';
+import { authService } from './supabase';
 import { syncService } from './supabaseSync';
-import { SupabaseAuthModal } from './SupabaseAuthModal';
 import { SCENE, CAPTIONS } from './authScene';
 import './auth.css';
 
@@ -68,12 +67,19 @@ function Scene() {
   );
 }
 
-const Field = ({ icon, label, children }) => (<label className="au-f"><Ic n={icon} />{children}<span>{label}</span></label>);
+const Field = ({ icon, label, children, extra, hasVal }) => (
+  <label className={'au-f' + (hasVal ? ' has-val' : '')}>
+    <Ic n={icon} />
+    {children}
+    <span>{label}</span>
+    {extra}
+  </label>
+);
 
 export function AuthScreen({ accounts = [], onPick, onNew, onCloudLogin, theme, toggleTheme }) {
   const [tab, setTab] = useState('login'), [name, setName] = useState(''), [email, setEmail] = useState(''), [pw, setPw] = useState('');
-  const [show, setShow] = useState(false), [loading, setLoading] = useState(false), [msg, setMsg] = useState(null), [out, setOut] = useState(false), [cfg, setCfg] = useState(false);
-  const login = tab === 'login', configured = isSupabaseConfigured();
+  const [show, setShow] = useState(false), [loading, setLoading] = useState(false), [msg, setMsg] = useState(null), [out, setOut] = useState(false);
+  const login = tab === 'login';
 
   const enter = async user => {
     let cloud = null;
@@ -113,16 +119,23 @@ export function AuthScreen({ accounts = [], onPick, onNew, onCloudLogin, theme, 
           </div>
           <div className="au-fields" style={{ '--i': 2 }}>
             <div className={'au-col' + (!login ? ' open' : '')}><div>
-              <Field icon="user" label="Tên của bạn"><input value={name} onChange={e => setName(e.target.value)} placeholder=" " autoComplete="name" tabIndex={login ? -1 : 0} /></Field>
+              <Field icon="user" label="Tên của bạn" hasVal={Boolean(name)}><input value={name} onChange={e => setName(e.target.value)} placeholder=" " autoComplete="name" tabIndex={login ? -1 : 0} /></Field>
             </div></div>
-            <Field icon="mail" label="Email"><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder=" " autoComplete="email" required /></Field>
-            <Field icon="lock" label="Mật khẩu">
+            <Field icon="mail" label="Email" hasVal={Boolean(email)}><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder=" " autoComplete="email" required /></Field>
+            <Field
+              icon="lock"
+              label="Mật khẩu"
+              hasVal={Boolean(pw)}
+              extra={
+                <button type="button" className="au-eye" onClick={() => setShow(!show)} aria-label={show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>
+                  <Ic n={show ? 'off' : 'eye'} c="" />
+                </button>
+              }
+            >
               <input type={show ? 'text' : 'password'} value={pw} onChange={e => setPw(e.target.value)} placeholder=" " minLength={6} autoComplete={login ? 'current-password' : 'new-password'} required />
-              <button type="button" className="au-eye" onClick={() => setShow(!show)} aria-label={show ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}><Ic n={show ? 'off' : 'eye'} c="" /></button>
             </Field>
           </div>
-          <div className="au-row" style={{ '--i': 3 }}>{login ? <button type="button" className="au-link" onClick={forgot}>Quên mật khẩu?</button> : <span />}
-            {!configured && <button type="button" className="au-link" onClick={() => setCfg(true)}>⚙️ Cấu hình Supabase</button>}</div>
+          <div className="au-row" style={{ '--i': 3 }}>{login ? <button type="button" className="au-link" onClick={forgot}>Quên mật khẩu?</button> : <span />}</div>
           {msg && <div className={'au-msg ' + msg.t} key={msg.s} role="status">{msg.s}</div>}
           <button className="au-go" disabled={loading} style={{ '--i': 4 }}>{loading ? <span className="au-spin" /> : <>{login ? 'Đăng nhập' : 'Tạo tài khoản'} <b>→</b></>}</button>
           <div className="au-or" style={{ '--i': 5 }}>hoặc dùng trên máy này</div>
@@ -133,7 +146,6 @@ export function AuthScreen({ accounts = [], onPick, onNew, onCloudLogin, theme, 
         </form>
         <Scene />
       </div>
-      {cfg && <SupabaseAuthModal currentDb={{}} onClose={() => setCfg(false)} onSyncSuccess={onCloudLogin} />}
     </div>
   );
 }

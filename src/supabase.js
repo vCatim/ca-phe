@@ -11,8 +11,11 @@ const getStoredConfig = () => {
 };
 
 const stored = getStoredConfig();
-export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || stored?.url || '';
-export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || stored?.key || '';
+const DEFAULT_URL = 'https://oywnzrsnvscumjqdstdu.supabase.co';
+const DEFAULT_KEY = 'sb_publishable_UgrI5YBxKPEqrv3mdu4rhw_JE1HNmSE';
+
+export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || stored?.url || DEFAULT_URL;
+export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || stored?.key || DEFAULT_KEY;
 
 export const isSupabaseConfigured = () => {
   return Boolean(

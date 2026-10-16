@@ -82,8 +82,8 @@ const wheel = (cx, cy) => {
   for (let a = 0; a < 180; a += 20) { const r = a * Math.PI / 180; sp += `M${(cx - 30 * Math.cos(r)).toFixed(1)} ${(cy - 30 * Math.sin(r)).toFixed(1)}L${(cx + 30 * Math.cos(r)).toFixed(1)} ${(cy + 30 * Math.sin(r)).toFixed(1)}`; }
   return `<circle cx="${cx}" cy="${cy}" r="35" class="wl" style="stroke-width:9"/><circle cx="${cx}" cy="${cy}" r="30" class="rim"/><path d="${sp}" class="sp"/><circle cx="${cx}" cy="${cy}" r="11" class="mt"/><circle cx="${cx}" cy="${cy}" r="4" class="wh"/>`;
 };
-// Xe ngắn lại (cơ sở bánh 131) và đặt lùi ra phía sau vỉa hè
-const scooter = svg(`<g class="hs" transform="translate(50 401) scale(.84)"><ellipse cx="112" cy="132" rx="122" ry="8" class="shd2"/>
+// Xe Honda Dream đời cũ: phóng to hơn 25%, bánh căm to, pô và yếm rõ ràng đặt trên vỉa hè
+const scooter = svg(`<g class="hs" transform="translate(42 376) scale(1.05)"><ellipse cx="112" cy="132" rx="122" ry="8" class="shd2"/>
 ${wheel(44, 90)}<g transform="translate(-30 0)">${wheel(205, 90)}</g>
 ${tube('M8 98C4 62 30 44 66 52', 6)}<rect x="0" y="62" width="12" height="11" rx="3" class="tl"/>${tube('M62 50L26 38L8 46', 5)}
 ${tube('M92 104L50 98', 5)}
@@ -97,12 +97,39 @@ ${tube('M165 96C166 30 246 30 250 96', 6)}
 ${tube('M200 36L188 20H172', 4, 'tbm')}${tube('M188 20L184 6', 2, 'tbm')}<ellipse cx="184" cy="4" rx="7" ry="4" class="sc1"/>
 <circle cx="218" cy="38" r="15" class="sc3"/><circle cx="218" cy="38" r="10" class="lamp"/></g></g>`);
 
-// Bầu trời: mặt trời (theme sáng), mặt trăng + sao (theme tối), mây trôi
-const cloud = (x, y, k, dl) => `<g class="s-cloud" style="animation-delay:${dl}s"><g transform="translate(${x} ${y}) scale(${k})"><ellipse cx="0" cy="0" rx="40" ry="12"/><ellipse cx="-18" cy="-8" rx="20" ry="12"/><ellipse cx="8" cy="-14" rx="24" ry="14"/><ellipse cx="28" cy="-4" rx="18" ry="10"/></g></g>`;
-const sky = svg(`<g class="s-sun au-pulse"><circle cx="125" cy="168" r="58" opacity=".18"/><circle cx="125" cy="168" r="42" opacity=".32"/><circle cx="125" cy="168" r="28" class="sun-core"/></g>
-<g class="s-moon"><circle cx="125" cy="168" r="50" class="moon-glow"/><circle cx="125" cy="168" r="26" class="moon-core"/><circle cx="116" cy="160" r="5" class="moon-cr"/><circle cx="134" cy="174" r="7" class="moon-cr"/><circle cx="122" cy="181" r="3" class="moon-cr"/></g>
-${[[40, 80], [210, 62], [300, 110], [380, 70], [470, 96], [540, 60], [590, 120], [70, 140], [250, 150]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="1.7" class="s-star" style="animation-delay:${-i * .8}s"/>`).join('')}
-${cloud(60, 128, 1.2, 0)}${cloud(330, 110, 1.4, -9)}${cloud(520, 152, 1, -18)}${cloud(220, 160, .8, -5)}`);
+// Đám mây hoạt hình cumulus liền khối (single-path SVG) theo mẫu tham khảo:
+// Đáy phẳng bo tròn, các múi vòm phồng bồng bềnh, bóng đổ viền đáy mềm mại.
+// KHÔNG dùng các hình tròn xếp chồng để tránh bị hiện vết đè tròn khi bật dark mode.
+const c1_body = 'M -58 14 H 58 C 66 14 72 9 72 1 C 72 -7 64 -12 54 -11 C 50 -23 36 -29 20 -25 C 12 -40 -20 -42 -32 -26 C -44 -28 -56 -20 -59 -9 C -68 -4 -68 8 -58 14 Z';
+const c1_shade = 'M -58 14 H 58 C 66 14 72 9 72 1 C 70 3 66 5 60 5 C 50 5 44 1 36 2 C 28 3 22 7 14 7 C 6 7 0 3 -8 4 C -18 5 -24 8 -34 8 C -44 8 -50 4 -58 6 C -64 7 -68 5 -70 2 C -71 8 -66 14 -58 14 Z';
+const c1_lit = 'M -28 -24 C -20 -36 4 -36 14 -22 C 8 -26 -12 -28 -22 -20 Z';
+
+const c2_body = 'M -72 15 H 72 C 81 15 88 10 88 1 C 88 -8 80 -13 68 -12 C 63 -25 48 -32 30 -28 C 22 -44 -14 -46 -28 -32 C -40 -34 -54 -26 -58 -13 C -68 -11 -76 -2 -76 6 C -76 12 -74 15 -72 15 Z';
+const c2_shade = 'M -72 15 H 72 C 81 15 88 10 88 1 C 84 4 78 6 70 6 C 58 6 50 2 40 3 C 30 4 24 8 15 8 C 5 8 0 4 -10 5 C -22 6 -30 9 -42 9 C -54 9 -62 5 -70 7 C -74 8 -76 6 -76 6 C -76 12 -74 15 -72 15 Z';
+const c2_lit = 'M -24 -30 C -12 -42 10 -40 22 -26 C 14 -32 -4 -34 -18 -26 Z';
+
+// Cụm mây con bay kèm (single path)
+const wisp = 'M -16 5 H 16 C 21 5 25 1 25 -3 C 25 -8 20 -11 14 -10 C 11 -16 2 -18 -4 -14 C -8 -17 -15 -15 -18 -10 C -22 -8 -24 -2 -22 2 C -21 4 -19 5 -16 5 Z';
+
+const cloud1 = (x, y, k, dl) => `<g class="s-cloud" style="animation-delay:${dl}s"><g transform="translate(${x} ${y}) scale(${k})">
+  <path d="${c1_body}" class="cld-body"/>
+  <path d="${c1_shade}" class="cld-shade"/>
+  <path d="${c1_lit}" class="cld-lit"/>
+  <g transform="translate(85 -16) scale(.42)"><path d="${wisp}" class="cld-body"/></g>
+</g></g>`;
+
+const cloud2 = (x, y, k, dl) => `<g class="s-cloud" style="animation-delay:${dl}s"><g transform="translate(${x} ${y}) scale(${k})">
+  <path d="${c2_body}" class="cld-body"/>
+  <path d="${c2_shade}" class="cld-shade"/>
+  <path d="${c2_lit}" class="cld-lit"/>
+  <g transform="translate(-95 -12) scale(.38)"><path d="${wisp}" class="cld-body"/></g>
+</g></g>`;
+
+// Bầu trời: mặt trời/mặt trăng đặt góc trên bên phải (cx=530, cy=80), sao và mây bay bồng bềnh
+const sky = svg(`<g class="s-sun au-pulse"><circle cx="530" cy="80" r="58" opacity=".18"/><circle cx="530" cy="80" r="42" opacity=".32"/><circle cx="530" cy="80" r="28" class="sun-core"/></g>
+<g class="s-moon"><circle cx="530" cy="80" r="50" class="moon-glow"/><circle cx="530" cy="80" r="26" class="moon-core"/><circle cx="521" cy="72" r="5" class="moon-cr"/><circle cx="539" cy="86" r="7" class="moon-cr"/><circle cx="527" cy="93" r="3" class="moon-cr"/></g>
+${[[30, 55], [90, 80], [160, 48], [230, 95], [310, 52], [375, 100], [435, 55], [620, 45], [660, 95]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="1.7" class="s-star" style="animation-delay:${-i * .8}s"/>`).join('')}
+${cloud1(70, 120, 1.05, 0)}${cloud2(320, 85, 1.2, -9)}${cloud1(200, 155, 0.8, -5)}${cloud2(590, 145, 0.95, -18)}`);
 
 // Chiếc ghế nhựa Sài Gòn; items = đồ đặt lên mặt ghế (toạ độ gốc ở góc trái mặt ghế)
 const stool = (cls, items = '') => `<g class="stool ${cls}"><ellipse cx="76" cy="122" rx="96" ry="9" class="shd"/>

@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import ICAL from 'ical.js';
 import { authService, isSupabaseConfigured } from './supabase';
 import { syncService } from './supabaseSync';
-import { SupabaseAuthModal } from './SupabaseAuthModal';
 import { AuthScreen } from './AuthScreen';
 
 // ---------- 1) Tiện ích ----------
@@ -639,15 +638,12 @@ function Summary({ db, rg }) {
     <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></div>);
 }
 
-function ProfileModal({ p, counts, theme, toggleTheme, onClose, onSave, onLogout, onDelete, onReset, onOpenCloud, isCloud }) {
+function ProfileModal({ p, counts, theme, toggleTheme, onClose, onSave, onLogout, onDelete, onReset }) {
   const [v, setV] = useState('menu'), [f, setF] = useState(p), [sure, setSure] = useState(false), [sure2, setSure2] = useState(false), set = (k, x) => setF({ ...f, [k]: x });
   return (<Modal title={v === 'menu' ? 'Tài khoản' : 'Thông tin cá nhân'} onClose={onClose}>
     <div className="row gap"><span className="ava">{(p.name[0] || '?').toUpperCase()}</span><div><b>{p.name}</b><small>{counts}</small></div></div>
     {v === 'menu' ? <>
       <button className="btn out" onClick={() => setV('info')}>👤 Thông tin cá nhân</button>
-      <button className="btn out" onClick={onOpenCloud} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, borderColor: 'var(--acc)' }}>
-        <span>⚡</span><span>{isCloud ? '☁️ Supabase Cloud (Đang kết nối)' : '☁️ Kết nối Đám mây Supabase'}</span>
-      </button>
       <button className="btn out" onClick={toggleTheme}>{theme === 'dark' ? '☀️ Chuyển sang giao diện sáng' : '🌙 Chuyển sang giao diện tối'}</button>
       <button className="btn" onClick={onLogout}>🚪 Đăng xuất</button>
     </> :
@@ -831,10 +827,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
   return (<div className="app">
     <aside className="side"><div className="logo"><LogoIcon s={34} /> Cà Phê</div><small className="mut">Quản lý cuộc sống sinh viên</small>
       <nav>{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav>
-      <div style={{ marginTop: 'auto', paddingTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <button className="btn sm out" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => setModal({ k: 'cloud' })} title="Đám mây Supabase">
-          <span>⚡</span><span>{cloudUser ? '☁️ Supabase (Online)' : '☁️ Đám mây Supabase'}</span>
-        </button>
+      <div style={{ marginTop: 'auto', paddingTop: 16 }}>
         <button className="btn sm out" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={toggleTheme} title="Đổi giao diện">
           <span>{theme === 'dark' ? '☀️' : '🌙'}</span><span>{theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}</span>
         </button>
@@ -843,12 +836,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
     <main>
       <div className="top">
         <div className="logo mobl"><LogoIcon s={26} /> Cà Phê</div>
-        <div className="row gap" style={{ alignItems: 'center' }}>
-          <button className="btn sm out" style={{ padding: '4px 8px', fontSize: '.75rem' }} onClick={() => setModal({ k: 'cloud' })} title="Đám mây Supabase">
-            ⚡ {cloudUser ? 'Online' : 'Cloud'}
-          </button>
-          <button className="theme" onClick={toggleTheme} aria-label="Đổi giao diện">{theme === 'dark' ? '☀️' : '🌙'}</button>
-        </div>
+        <button className="theme" onClick={toggleTheme} aria-label="Đổi giao diện">{theme === 'dark' ? '☀️' : '🌙'}</button>
       </div>
       <div key={page}>{page === 'today' && <Today {...P} />}{page === 'cal' && <Calendar {...P} />}{page === 'fin' && <Finance {...P} />}{page === 'goal' && <Goals {...P} />}</div>
     </main>
@@ -857,24 +845,9 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
     {modal?.k === 'task' && <TaskForm item={modal.it} onSave={saveTask} onClose={() => setModal(null)} onDel={id => { delTask(id); setModal(null); }} />}
     {modal?.k === 'tx' && <TxForm item={modal.it} onSave={saveTx} onClose={() => setModal(null)} />}
     {modal?.k === 'goal' && <GoalForm item={modal.it} onSave={g => upsert('goals', g)} onClose={() => setModal(null)} />}
-    {modal?.k === 'profile' && <ProfileModal p={db.profile} counts={`${db.tasks.length} việc · ${db.txs.length} giao dịch · ${db.goals.length} mục tiêu`} onClose={() => setModal(null)} onSave={p => { setDb(d => ({ ...d, profile: p })); if (cloudUser) syncService.saveProfile(cloudUser.id, p); onRename(p.name); setModal(null); }} theme={theme} toggleTheme={toggleTheme} onLogout={onLogout} onDelete={onDelete} onReset={() => { setDb(d => ({ ...d, tasks: [], txs: [], goals: [] })); setModal(null); }} onOpenCloud={() => setModal({ k: 'cloud' })} isCloud={!!cloudUser} />}
+    {modal?.k === 'profile' && <ProfileModal p={db.profile} counts={`${db.tasks.length} việc · ${db.txs.length} giao dịch · ${db.goals.length} mục tiêu`} onClose={() => setModal(null)} onSave={p => { setDb(d => ({ ...d, profile: p })); if (cloudUser) syncService.saveProfile(cloudUser.id, p); onRename(p.name); setModal(null); }} theme={theme} toggleTheme={toggleTheme} onLogout={onLogout} onDelete={onDelete} onReset={() => { setDb(d => ({ ...d, tasks: [], txs: [], goals: [] })); setModal(null); }} />}
     {modal?.k === 'groups' && <GroupsModal groups={db.groups} onClose={() => setModal(null)} onAdd={name => setDb(d => ({ ...d, groups: [...d.groups, { name, share: .1, color: PAL[d.groups.length % PAL.length] }] }))} onRemove={name => setDb(d => ({ ...d, groups: d.groups.filter(g => g.name !== name) }))} />}
     {modal?.k === 'list' && <TxList db={db} type={modal.type} date={modal.date} onClose={() => setModal(null)} onAdd={() => openTx(modal.type, { date: modal.date || today() })} onEdit={x => openTx(x.type, x)} onDel={id => del('txs', id)} />}
-    {modal?.k === 'cloud' && (
-      <SupabaseAuthModal
-        currentDb={db}
-        onClose={() => setModal(null)}
-        onSyncSuccess={(user, cloudData) => {
-          setCloudUser(user);
-          if (cloudData) {
-            setDb(cloudData);
-            flash('Đã đồng bộ dữ liệu mới nhất từ Supabase Cloud!');
-          } else {
-            flash('Kết nối Supabase Cloud thành công!');
-          }
-        }}
-      />
-    )}
   </div>);
 }
 // Gốc: quản lý tài khoản (đăng nhập lại / tạo mới) và giao diện sáng-tối
@@ -885,12 +858,36 @@ export default function Root() {
   const handleCloudLogin = (user, cloudData) => {
     const accountName = user.user_metadata?.full_name || cloudData?.profile?.name || user.email.split('@')[0];
     const existing = m.accounts.find(a => a.id === user.id);
+
+    // Kiểm tra xem trên máy này có dữ liệu local trước đó không (ví dụ tài khoản người dùng đang dùng thử)
+    const prevAcc = m.accounts.find(a => a.id !== user.id);
+    const prevDb = prevAcc ? rd(ACC(prevAcc.id)) : null;
+    const hasLocalData = prevDb && (prevDb.tasks?.length || prevDb.txs?.length || prevDb.goals?.length);
+
     if (existing) {
       if (cloudData) wr(ACC(user.id), upgrade(cloudData));
       setM({ ...m, active: user.id });
     } else {
-      const initial = cloudData || { ...seed(), profile: { name: accountName, budget: 3000000, income: 0 } };
-      wr(ACC(user.id), upgrade(initial));
+      let initialData;
+      // 1. Nếu trên Cloud đã có dữ liệu sẵn -> dùng dữ liệu Cloud
+      if (cloudData && (cloudData.tasks?.length || cloudData.txs?.length || cloudData.goals?.length)) {
+        initialData = cloudData;
+      } else if (hasLocalData) {
+        // 2. Nếu tài khoản Cloud mới tinh nhưng trên máy đang có việc/chi tiêu cũ -> tự động mang toàn bộ lên Cloud!
+        initialData = {
+          ...prevDb,
+          profile: {
+            ...prevDb.profile,
+            name: accountName || prevDb.profile?.name || 'Người dùng',
+          }
+        };
+        // Tự động đẩy toàn bộ dữ liệu này lên Supabase ngay trong nền
+        syncService.uploadAll(user.id, initialData).catch(console.error);
+      } else {
+        initialData = { ...seed(), profile: { name: accountName, budget: 3000000, income: 0 } };
+      }
+
+      wr(ACC(user.id), upgrade(initialData));
       setM({ ...m, accounts: [...m.accounts, { id: user.id, name: accountName }], active: user.id });
     }
   };
