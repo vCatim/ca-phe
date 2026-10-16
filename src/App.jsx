@@ -5,6 +5,7 @@ import ICAL from 'ical.js';
 import { authService, isSupabaseConfigured } from './supabase';
 import { syncService } from './supabaseSync';
 import { SupabaseAuthModal } from './SupabaseAuthModal';
+import { AuthScreen } from './AuthScreen';
 
 // ---------- 1) Tiện ích ----------
 const pad = n => String(n).padStart(2, '0');
@@ -638,16 +639,6 @@ function Summary({ db, rg }) {
     <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></div>);
 }
 
-// ---------- Đăng nhập lại / tài khoản ----------
-function Login({ accounts, onPick, onNew, onOpenCloud }) {
-  return (<div className="onb"><div className="card onbc"><div className="logo"><LogoIcon s={34} /> Cà Phê</div><h2>Đăng nhập lại</h2><p className="mut">Chọn tài khoản để tiếp tục, hoặc tạo tài khoản/tên mới.</p>
-    {accounts.map(a => <button key={a.id} className="acc" onClick={() => onPick(a.id)}><span className="ava">{(a.name[0] || '?').toUpperCase()}</span><b>{a.name}</b><span className="mut">Vào →</span></button>)}
-    <button className="btn out" onClick={onNew}>+ Tạo tài khoản / tên mới</button>
-    <button className="btn out" onClick={onOpenCloud} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, borderColor: 'var(--acc)' }}>
-      <span>⚡</span><span>Đăng nhập qua Đám mây Supabase</span>
-    </button>
-  </div></div>);
-}
 function ProfileModal({ p, counts, theme, toggleTheme, onClose, onSave, onLogout, onDelete, onReset, onOpenCloud, isCloud }) {
   const [v, setV] = useState('menu'), [f, setF] = useState(p), [sure, setSure] = useState(false), [sure2, setSure2] = useState(false), set = (k, x) => setF({ ...f, [k]: x });
   return (<Modal title={v === 'menu' ? 'Tài khoản' : 'Thông tin cá nhân'} onClose={onClose}>
@@ -888,7 +879,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
 }
 // Gốc: quản lý tài khoản (đăng nhập lại / tạo mới) và giao diện sáng-tối
 export default function Root() {
-  const [m, setM] = useState(loadMeta), [creating, setCreating] = useState(false), [cloudModal, setCloudModal] = useState(false);
+  const [m, setM] = useState(loadMeta), [creating, setCreating] = useState(false);
   useEffect(() => { wr(META, m); document.documentElement.dataset.theme = m.theme; }, [m]);
 
   const handleCloudLogin = (user, cloudData) => {
@@ -902,7 +893,6 @@ export default function Root() {
       wr(ACC(user.id), upgrade(initial));
       setM({ ...m, accounts: [...m.accounts, { id: user.id, name: accountName }], active: user.id });
     }
-    setCloudModal(false);
   };
 
   const create = f => {
@@ -913,25 +903,10 @@ export default function Root() {
     setM({ ...m, accounts: [...m.accounts, { id, name: f.name.trim() }], active: id }); setCreating(false);
   };
   if (m.active) return <App key={m.active} id={m.active} theme={m.theme} toggleTheme={() => setM(x => ({ ...x, theme: x.theme === 'dark' ? 'light' : 'dark' }))}
-    onLogout={() => setM({ ...m, active: null })} onRename={name => setM(x => ({ ...x, accounts: x.accounts.map(a => a.id === x.active ? { ...a, name } : a) }))}
+    onLogout={() => { authService.signOut().catch(() => {}); setM({ ...m, active: null }); }} onRename={name => setM(x => ({ ...x, accounts: x.accounts.map(a => a.id === x.active ? { ...a, name } : a) }))}
     onDelete={() => { try { localStorage.removeItem(ACC(m.active)); } catch (e) {} setM({ ...m, active: null, accounts: m.accounts.filter(a => a.id !== m.active) }); }} />;
-  if (!m.accounts.length || creating) return <Onboarding onDone={create} onBack={m.accounts.length ? () => setCreating(false) : null} />;
-  return (
-    <>
-      <Login
-        accounts={m.accounts}
-        onPick={id => setM({ ...m, active: id })}
-        onNew={() => setCreating(true)}
-        onOpenCloud={() => setCloudModal(true)}
-      />
-      {cloudModal && (
-        <SupabaseAuthModal
-          currentDb={seed()}
-          onClose={() => setCloudModal(false)}
-          onSyncSuccess={handleCloudLogin}
-        />
-      )}
-    </>
-  );
+  if (creating) return <Onboarding onDone={create} onBack={() => setCreating(false)} />;
+  return <AuthScreen accounts={m.accounts} onPick={id => setM({ ...m, active: id })} onNew={() => setCreating(true)} onCloudLogin={handleCloudLogin}
+    theme={m.theme} toggleTheme={() => setM(x => ({ ...x, theme: x.theme === 'dark' ? 'light' : 'dark' }))} />;
 }
 

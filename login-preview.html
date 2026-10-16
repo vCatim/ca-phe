@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Cà Phê - Đăng nhập Supabase | Preview Giao diện</title>
+  
+  <!-- Typography matching Cà Phê project -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:ital,wght@0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+  <style>
+    /* ==========================================================================
+       CSS Variables & Theme Tokens (WCAG AA Compliant, Neutral Elevation)
+       ========================================================================== */
+    :root, [data-theme="light"] {
+      --bg-outer: #8e6860;
+      --bg-gradient: linear-gradient(135deg, #a4766e 0%, #8c645c 45%, #62433e 100%);
+      --card-bg: #f9f8f6;
+      --card-border: rgba(255, 255, 255, 0.75);
+      --card-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      
+      --text-main: #231b18;
+      --text-muted: #554842; /* 5.8:1 contrast */
+      --text-sub: #554842;   /* 5.8:1 contrast */
+      
+      --input-bg: #ffffff;
+      --input-border: #dcd4cc;
+      --input-focus-border: #8b5a64;
+      --input-focus-ring: rgba(139, 90, 100, 0.2);
+      --input-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      
+      --btn-primary-bg: #8c5b65;
+      --btn-primary-hover: #784a54;
+      --btn-primary-active: #663d46;
+      --btn-primary-text: #ffffff;
+      --btn-primary-shadow: 0 6px 16px -2px rgba(0, 0, 0, 0.2);
+      
+      --social-btn-bg: #ffffff;
+      --social-btn-border: #dcd4cc;
+      --social-btn-hover-border: #b8aba0;
+      --social-btn-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+      
+      --divider-line: #d8cec4;
+      --accent-pill: #e5a44a;
+      --accent-pill-text: #16120e;
+      
+      --tag-bg: rgba(140, 91, 101, 0.1);
+    }
+
+    [data-theme="dark"] {
+      --bg-outer: #1c1514;
+      --bg-gradient: linear-gradient(135deg, #2b1d19 0%, #1a1210 50%, #0f0a09 100%);
+      --card-bg: #1f1816;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.7);
+      
+      --text-main: #f7efe7;
+      --text-muted: #c8b9ae; /* > 6:1 contrast */
+      --text-sub: #b4a297;   /* > 5:1 contrast */
+      
+      --input-bg: #281f1b;
+      --input-border: #44342d;
+      --input-focus-border: #c98592;
+      --input-focus-ring: rgba(201, 133, 146, 0.25);
+      --input-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      
+      --btn-primary-bg: #9e6470;
+      --btn-primary-hover: #b0727f;
+      --btn-primary-active: #8b5460;
+      --btn-primary-text: #ffffff;
+      --btn-primary-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.55);
+      
+      --social-btn-bg: #281f1b;
+      --social-btn-border: #42322c;
+      --social-btn-hover-border: #624b42;
+      --social-btn-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+      
+      --divider-line: #3d2f29;
+      --accent-pill: #e5a44a;
+      --accent-pill-text: #16120e;
+      
+      --tag-bg: rgba(201, 133, 146, 0.18);
+    }
+
+    /* ==========================================================================
+       Reset & Base Styles
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      min-height: 100vh;
+      width: 100%;
+      font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif;
+      color: var(--text-main);
+      background: var(--bg-outer);
+      background-image: var(--bg-gradient);
+      background-attachment: fixed;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background 0.35s ease, color 0.35s ease;
+    }
+
+    ::selection {
+      background: var(--btn-primary-bg);
+      color: #ffffff;
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--btn-primary-bg);
+      outline-offset: 3px;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 7px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(140, 91, 101, 0.35);
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(140, 91, 101, 0.55);
+    }
+
+    /* ==========================================================================
+       Top Preview Control Bar (Live Testing Controls)
+       ========================================================================== */
+    .preview-bar {
+      position: fixed;
+      top: 16px;
+      z-index: 100;
+      background: rgba(22, 16, 14, 0.88);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 999px;
+      padding: 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      animation: barFadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes barFadeIn {
+      from { opacity: 0; transform: translateY(-16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .preview-brand-tag {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #ffd899; /* > 7:1 contrast on dark bar */
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-right: 4px;
+    }
+
+    .preview-pill {
+      background: rgba(255, 255, 255, 0.1);
+      color: #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
+    }
+
+    .preview-pill:hover {
+      background: rgba(255, 255, 255, 0.24);
+      transform: translateY(-1px);
+    }
+
+    .preview-pill.active {
+      background: var(--accent-pill);
+      color: var(--accent-pill-text);
+      border-color: var(--accent-pill);
+    }
+
+    .preview-divider {
+      width: 1px;
+      height: 18px;
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* ==========================================================================
+       Master Container & 3D Tilt Wrapper
+       ========================================================================== */
+    .viewport-stage {
+      padding: 72px 20px 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+      perspective: 1200px;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .viewport-stage.simulate-mobile {
+      max-width: 440px;
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 1020px;
+      min-height: 620px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 36px;
+      box-shadow: var(--card-shadow);
+      display: grid;
+      grid-template-columns: 1fr 1.12fr;
+      padding: 16px;
+      gap: 16px;
+      position: relative;
+      overflow: hidden;
+      transform-style: preserve-3d;
+      transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, background 0.35s ease;
+      animation: cardEntrance 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes cardEntrance {
+      0% {
+        opacity: 0;
+        transform: translateY(28px) scale(0.97);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* ==========================================================================
+       Left Column: Login Form Content
+       ========================================================================== */
+    .auth-form-side {
+      padding: 40px 42px 34px 42px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      position: relative;
+      z-index: 10;
+    }
+
+    .brand-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+
+    .brand-logo-badge {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #a8654c, #6c3b47);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-size: 1.15rem;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .auth-card:hover .brand-logo-badge {
+      transform: rotate(-4deg) scale(1.05);
+    }
+
+    .brand-name {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-weight: 700;
+      font-size: 1.28rem;
+      letter-spacing: -0.01em;
+      color: var(--text-main);
+    }
+
+    .brand-tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 2px 8px;
+      background: var(--tag-bg);
+      color: var(--btn-primary-bg);
+      border-radius: 999px;
+    }
+
+    .form-title-group {
+      margin-bottom: 26px;
+    }
+
+    .form-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 2.3rem;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+      transition: color 0.3s;
+    }
+
+    .form-subtitle {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+      font-weight: 500;
+      transition: color 0.3s;
+    }
+
+    /* Mode Tab Switcher */
+    .tab-switch {
+      display: inline-flex;
+      background: rgba(0, 0, 0, 0.05);
+      border-radius: 12px;
+      padding: 3px;
+      margin-bottom: 22px;
+    }
+
+    [data-theme="dark"] .tab-switch {
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    .tab-btn {
+      border: none;
+      background: transparent;
+      padding: 7px 18px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .tab-btn.active {
+      background: var(--input-bg);
+      color: var(--text-main);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    }
+
+    /* Form Inputs */
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .input-group {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .input-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .auth-input {
+      width: 100%;
+      height: 52px;
+      background: var(--input-bg);
+      border: 1.5px solid var(--input-border);
+      border-radius: 15px;
+      padding: 0 18px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      color: var(--text-main);
+      box-shadow: var(--input-shadow);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      outline: none;
+    }
+
+    .auth-input::placeholder {
+      color: var(--text-sub);
+      font-weight: 400;
+      opacity: 0.95;
+    }
+
+    .auth-input:hover {
+      border-color: rgba(140, 91, 101, 0.45);
+    }
+
+    .auth-input:focus {
+      border-color: var(--input-focus-border);
+      box-shadow: 0 0 0 4px var(--input-focus-ring);
+      background: var(--input-bg);
+    }
+
+    .input-action-btn {
+      position: absolute;
+      right: 14px;
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      cursor: pointer;
+      padding: 6px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .input-action-btn:hover {
+      color: var(--text-main);
+      background: rgba(0, 0, 0, 0.05);
+    }
+
+    /* Extra row: Forgot password */
+    .form-meta-row {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      margin-top: -4px;
+      margin-bottom: 4px;
+    }
+
+    .forgot-link {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+      cursor: pointer;
+    }
+
+    .forgot-link:hover {
+      color: var(--btn-primary-bg);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    /* Submit Button */
+    .submit-btn {
+      width: 100%;
+      height: 52px;
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-text);
+      border: none;
+      border-radius: 15px;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      cursor: pointer;
+      box-shadow: var(--btn-primary-shadow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .submit-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.2) 50%, transparent 80%);
+      transform: translateX(-100%);
+      transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .submit-btn:hover::before {
+      transform: translateX(100%);
+    }
+
+    .submit-btn:hover {
+      background: var(--btn-primary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 22px -4px rgba(0, 0, 0, 0.3);
+    }
+
+    .submit-btn:active {
+      transform: translateY(0) scale(0.985);
+      background: var(--btn-primary-active);
+    }
+
+    .btn-spinner {
+      width: 20px;
+      height: 20px;
+      border: 2.5px solid rgba(255, 255, 255, 0.35);
+      border-top-color: #ffffff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Or Continue With Divider */
+    .divider-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 24px 0 18px;
+    }
+
+    .divider-line {
+      flex: 1;
+      height: 1px;
+      background: var(--divider-line);
+    }
+
+    .divider-text {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* Social Auth Buttons */
+    .social-auth-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .social-btn {
+      height: 52px;
+      background: var(--social-btn-bg);
+      border: 1.5px solid var(--social-btn-border);
+      border-radius: 15px;
+      box-shadow: var(--social-btn-shadow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+
+    .social-btn:hover {
+      border-color: var(--social-btn-hover-border);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+    }
+
+    .social-btn:active {
+      transform: scale(0.97);
+    }
+
+    .social-icon {
+      width: 22px;
+      height: 22px;
+      display: block;
+      transition: transform 0.22s;
+    }
+
+    .social-btn:hover .social-icon {
+      transform: scale(1.08);
+    }
+
+    /* Form Footer Note */
+    .form-footer-note {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 0.84rem;
+      color: var(--text-muted);
+    }
+
+    .form-footer-note a {
+      color: var(--btn-primary-bg);
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .form-footer-note a:hover {
+      text-decoration: underline;
+    }
+
+    /* ==========================================================================
+       Right Column: Atmospheric Parallax Scenery Showcase
+       ========================================================================== */
+    .auth-visual-side {
+      position: relative;
+      border-radius: 28px;
+      background: #241629; /* Grounded dark surface with > 14:1 contrast for white text */
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 36px 34px 30px;
+      user-select: none;
+    }
+
+    /* Parallax Canvas Layers */
+    .parallax-viewport {
+      position: absolute;
+      inset: -25px;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    .parallax-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      will-change: transform;
+      transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Layer 1: Sky Gradient & Sunset Glow with dark grounded base */
+    .layer-sky {
+      background: linear-gradient(180deg, #5c436b 0%, #875c75 22%, #ba7874 44%, #e29c78 65%, #241629 100%);
+      transition: filter 0.35s ease;
+    }
+
+    [data-theme="dark"] .layer-sky {
+      background: linear-gradient(180deg, #24172c 0%, #3a2238 25%, #562f3a 50%, #864639 72%, #180f1d 100%);
+    }
+
+    /* Layer 2: Sun (Integrated clean SVG entity) */
+    .layer-sun-container {
+      position: absolute;
+      left: 14%;
+      top: 20%;
+      width: 120px;
+      height: 120px;
+    }
+
+    /* Layer 3: Distant Violet Mountains */
+    .layer-mountains {
+      bottom: 0;
+      height: 100%;
+    }
+
+    /* Layer 4: Floating Cliff Shelf with Snow Cap & Bush */
+    .layer-cliff {
+      bottom: 0;
+      height: 100%;
+    }
+
+    /* Layer 5: Trees & Foliage Silhouette */
+    .layer-trees {
+      bottom: 0;
+      height: 100%;
+    }
+
+    /* Layer 6: Ambient Dust Particles using SVG */
+    .layer-particles {
+      position: absolute;
+      inset: 0;
+      opacity: 0.65;
+      animation: particleFloat 22s linear infinite;
+    }
+
+    @keyframes particleFloat {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(-340px); }
+    }
+
+    .scene-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      overflow: visible;
+    }
+
+    /* Direct Text & Controls Overlay (Matches Reference Image Exactly - No Nested Card) */
+    .scene-text-overlay {
+      position: relative;
+      z-index: 20;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .slide-quote-box {
+      min-height: 48px;
+      position: relative;
+    }
+
+    .slide-quote-text {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #ffffff;
+      line-height: 1.4;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .slide-quote-sub {
+      font-size: 0.85rem;
+      color: #ffffff;
+      opacity: 0.92;
+      text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+      margin-top: 4px;
+      font-weight: 500;
+    }
+
+    .visual-controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Dots indicator */
+    .slide-dots {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .slide-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.45);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+    }
+
+    .slide-dot.active {
+      width: 22px;
+      background: #ffffff;
+    }
+
+    /* Carousel navigation buttons (Glass circles matching reference image) */
+    .slide-nav-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    .slide-nav-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      background: rgba(255, 255, 255, 0.16);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: #ffffff;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .slide-nav-btn:hover {
+      background: rgba(255, 255, 255, 0.32);
+      border-color: #ffffff;
+      transform: scale(1.06);
+    }
+
+    .slide-nav-btn:active {
+      transform: scale(0.94);
+    }
+
+    /* ==========================================================================
+       Status Notification Toast
+       ========================================================================== */
+    .status-toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e1714;
+      color: #ffffff;
+      padding: 14px 20px;
+      border-radius: 16px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 200;
+      pointer-events: none;
+    }
+
+    .status-toast.show {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .status-toast-icon {
+      font-size: 1.2rem;
+    }
+
+    /* ==========================================================================
+       Responsive & Mobile Media Queries
+       ========================================================================== */
+    @media (max-width: 900px) {
+      .preview-bar {
+        top: 10px;
+        padding: 5px 10px;
+        gap: 6px;
+      }
+      .preview-pill {
+        padding: 4px 8px;
+        font-size: 0.72rem;
+      }
+
+      .viewport-stage {
+        padding: 60px 14px 24px;
+      }
+
+      .auth-card {
+        grid-template-columns: 1fr;
+        max-width: 480px;
+        border-radius: 28px;
+        padding: 12px;
+        gap: 12px;
+        min-height: auto;
+      }
+
+      .auth-visual-side {
+        order: -1;
+        min-height: 230px;
+        max-height: 250px;
+        padding: 20px;
+        border-radius: 22px;
+      }
+
+      .layer-sun-container {
+        width: 90px;
+        height: 90px;
+        left: 10%;
+        top: 15%;
+      }
+
+      .scene-text-overlay {
+        gap: 10px;
+      }
+
+      .slide-quote-text {
+        font-size: 0.98rem;
+      }
+
+      .slide-quote-sub {
+        display: none;
+      }
+
+      .auth-form-side {
+        padding: 24px 16px 20px 16px;
+      }
+
+      .brand-header {
+        margin-bottom: 16px;
+      }
+
+      .form-title {
+        font-size: 1.85rem;
+      }
+
+      .form-title-group {
+        margin-bottom: 20px;
+      }
+
+      .auth-input, .submit-btn, .social-btn {
+        height: 48px;
+      }
+    }
+
+    /* Simulated Mobile Frame in Preview Mode */
+    .viewport-stage.simulate-mobile .auth-card {
+      grid-template-columns: 1fr !important;
+      max-width: 390px !important;
+      border-radius: 36px;
+      padding: 12px;
+      border: 4px solid rgba(255, 255, 255, 0.25);
+    }
+    .viewport-stage.simulate-mobile .auth-visual-side {
+      order: -1;
+      min-height: 200px;
+      padding: 16px;
+    }
+    .viewport-stage.simulate-mobile .auth-form-side {
+      padding: 20px 12px 16px;
+    }
+    .viewport-stage.simulate-mobile .form-title {
+      font-size: 1.65rem;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Preview Control Bar -->
+  <header class="preview-bar" aria-label="Khung điều khiển xem thử">
+    <div class="preview-brand-tag">
+      <span>☕</span> CÀ PHÊ PREVIEW
+    </div>
+    
+    <div class="preview-divider"></div>
+
+    <!-- Theme Switcher -->
+    <button class="preview-pill" id="themeToggleBtn" title="Chuyển đổi Sáng / Tối">
+      <span id="themeIcon">🌙</span>
+      <span id="themeLabel">Chế độ Tối</span>
+    </button>
+
+    <div class="preview-divider"></div>
+
+    <!-- Viewport Switcher -->
+    <button class="preview-pill active" id="viewDesktopBtn">
+      <span>💻</span> Máy tính
+    </button>
+    <button class="preview-pill" id="viewMobileBtn">
+      <span>📱</span> Điện thoại
+    </button>
+
+    <div class="preview-divider"></div>
+
+    <!-- Parallax Sensitivity Toggle -->
+    <button class="preview-pill" id="parallaxToggleBtn">
+      <span>✨</span> Parallax: <b id="parallaxStatus" style="color:var(--accent-pill)">BẬT</b>
+    </button>
+  </header>
+
+  <!-- Viewport Stage -->
+  <main class="viewport-stage" id="viewportStage">
+    
+    <article class="auth-card" id="authCard" aria-labelledby="formTitle">
+      
+      <!-- LEFT: Login Form -->
+      <section class="auth-form-side">
+        
+        <div>
+          <!-- Brand Badge -->
+          <div class="brand-header">
+            <div class="brand-logo-badge" aria-hidden="true">☕</div>
+            <div class="brand-name">Cà Phê</div>
+            <span class="brand-tag">Cloud Sync</span>
+          </div>
+
+          <!-- Main Greeting -->
+          <div class="form-title-group">
+            <h1 class="form-title" id="formTitle">Hello Again!</h1>
+            <p class="form-subtitle" id="formSubtitle">Let's get started with your 30 days trial</p>
+          </div>
+
+          <!-- Segment Tab (Đăng nhập / Đăng ký) -->
+          <div class="tab-switch" role="tablist">
+            <button class="tab-btn active" id="tabSignIn" role="tab" aria-selected="true">Đăng nhập</button>
+            <button class="tab-btn" id="tabSignUp" role="tab" aria-selected="false">Đăng ký mới</button>
+          </div>
+
+          <!-- Auth Form -->
+          <form class="auth-form" id="loginForm" autocomplete="on">
+            
+            <!-- Optional Full Name for Sign Up -->
+            <div class="input-group" id="nameGroup" style="display: none;">
+              <div class="input-wrapper">
+                <input 
+                  type="text" 
+                  class="auth-input" 
+                  id="nameInput" 
+                  placeholder="Họ và tên của bạn" 
+                  autocomplete="name"
+                >
+              </div>
+            </div>
+
+            <!-- Email Input -->
+            <div class="input-group">
+              <div class="input-wrapper">
+                <input 
+                  type="email" 
+                  class="auth-input" 
+                  id="emailInput" 
+                  placeholder="Email" 
+                  required 
+                  autocomplete="email"
+                >
+              </div>
+            </div>
+
+            <!-- Password Input with Show/Hide toggle -->
+            <div class="input-group">
+              <div class="input-wrapper">
+                <input 
+                  type="password" 
+                  class="auth-input" 
+                  id="passwordInput" 
+                  placeholder="Password" 
+                  required 
+                  autocomplete="current-password"
+                >
+                <button 
+                  type="button" 
+                  class="input-action-btn" 
+                  id="togglePasswordBtn" 
+                  aria-label="Hiện hoặc ẩn mật khẩu"
+                  title="Hiện/Ẩn mật khẩu"
+                >
+                  <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Recovery Password Link -->
+            <div class="form-meta-row" id="recoveryRow">
+              <a class="forgot-link" id="recoveryBtn">Recovery Password</a>
+            </div>
+
+            <!-- Primary Action Button -->
+            <button type="submit" class="submit-btn" id="submitBtn">
+              <span id="btnText">Sign In</span>
+              <div class="btn-spinner" id="btnSpinner"></div>
+            </button>
+          </form>
+
+          <!-- Divider -->
+          <div class="divider-row">
+            <div class="divider-line"></div>
+            <span class="divider-text">Or continue with</span>
+            <div class="divider-line"></div>
+          </div>
+
+          <!-- Social SSO Providers -->
+          <div class="social-auth-grid">
+            <!-- Google Button -->
+            <button class="social-btn" id="googleBtn" type="button" aria-label="Đăng nhập bằng Google" title="Đăng nhập với Google">
+              <svg class="social-icon" viewBox="0 0 24 24">
+                <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.7l3.1-3.1C17.3 1.8 14.8 1 12 1 7.4 1 3.5 3.6 1.6 7.4l3.7 2.9C6.2 7.4 8.8 5 12 5z"/>
+                <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.7-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/>
+                <path fill="#FBBC05" d="M5.3 14.7c-.2-.7-.4-1.4-.4-2.2s.2-1.5.4-2.2L1.6 7.4C.6 9.4 0 11.6 0 14s.6 4.6 1.6 6.6l3.7-2.9z"/>
+                <path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3.2 0-5.8-2.4-6.7-5.3L1.6 16c1.9 3.8 5.8 7 10.4 7z"/>
+              </svg>
+            </button>
+
+            <!-- Apple Button -->
+            <button class="social-btn" id="appleBtn" type="button" aria-label="Đăng nhập bằng Apple" title="Đăng nhập với Apple">
+              <svg class="social-icon" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.87c.66-.82 1.11-1.96.99-3.1-.95.04-2.11.64-2.79 1.44-.6.69-1.13 1.83-1 2.95 1.07.08 2.15-.55 2.8-1.29z"/>
+              </svg>
+            </button>
+
+            <!-- Supabase / Cloud Icon -->
+            <button class="social-btn" id="supabaseBtn" type="button" aria-label="Đăng nhập bằng Supabase" title="Kết nối Supabase Cloud">
+              <svg class="social-icon" viewBox="0 0 24 24" fill="none">
+                <path d="M12.9 2L3 13.7h8.1L10.2 22 21 9.9h-8.1L12.9 2z" fill="#3ECF8E"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Footer note -->
+        <div class="form-footer-note">
+          <span id="footerText">Chưa có tài khoản Supabase?</span> 
+          <a id="switchModeLink">Đăng ký ngay</a>
+        </div>
+
+      </section>
+
+      <!-- RIGHT: Parallax Sunset Landscape Art (Matches Reference Image) -->
+      <section class="auth-visual-side" id="visualSide">
+        
+        <!-- Multi-layer Parallax Scene -->
+        <div class="parallax-viewport" id="parallaxViewport">
+          
+          <!-- Layer 1: Sky Gradient (Depth: 0.02) -->
+          <div class="parallax-layer layer-sky" data-depth="0.02"></div>
+
+          <!-- Layer 2: Sun (Depth: 0.05) -->
+          <div class="parallax-layer" data-depth="0.05">
+            <div class="layer-sun-container">
+              <svg width="100%" height="100%" viewBox="0 0 120 120">
+                <defs>
+                  <radialGradient id="sunGrad" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stop-color="#ffffff"/>
+                    <stop offset="35%" stop-color="#fff8db"/>
+                    <stop offset="70%" stop-color="#ffd580"/>
+                    <stop offset="100%" stop-color="#f5a442"/>
+                  </radialGradient>
+                </defs>
+                <circle cx="60" cy="60" r="50" fill="url(#sunGrad)"/>
+              </svg>
+            </div>
+          </div>
+
+          <!-- Layer 3: Distant Violet Mountains (Depth: 0.09) -->
+          <div class="parallax-layer layer-mountains" data-depth="0.09">
+            <svg class="scene-svg" viewBox="0 0 600 700" preserveAspectRatio="none">
+              <path d="M0,450 Q90,380 180,410 T380,390 Q480,360 600,430 L600,700 L0,700 Z" fill="#7d5d7a" opacity="0.45" />
+              <path d="M150,470 Q280,390 420,440 T600,410 L600,700 L150,700 Z" fill="#604266" opacity="0.6" />
+              <path d="M320,440 Q420,380 540,415 L600,435 L600,700 L320,700 Z" fill="#4d3056" opacity="0.85" />
+            </svg>
+          </div>
+
+          <!-- Layer 4: Floating Cliff Shelf with Snow Cap & Bush (Depth: 0.16) -->
+          <div class="parallax-layer layer-cliff" data-depth="0.16">
+            <svg class="scene-svg" viewBox="0 0 600 700" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="snowGradFinal" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#ffffff"/>
+                  <stop offset="50%" stop-color="#dfd9eb"/>
+                  <stop offset="100%" stop-color="#b6a3c9"/>
+                </linearGradient>
+                <linearGradient id="rockGradFinal" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#493850"/>
+                  <stop offset="60%" stop-color="#2a1f33"/>
+                  <stop offset="100%" stop-color="#191122"/>
+                </linearGradient>
+              </defs>
+
+              <g transform="translate(350, 240) scale(0.85)">
+                <path d="M0,80 Q25,-10 60,10 Q20,50 0,80 Z" fill="#1f1826"/>
+                <path d="M15,80 Q55,-15 85,25 Q40,60 15,80 Z" fill="#1f1826"/>
+                <path d="M30,80 Q85,-5 105,45 Q55,70 30,80 Z" fill="#1f1826"/>
+                <path d="M45,80 Q110,15 120,65 Q70,80 45,80 Z" fill="#1f1826"/>
+                <path d="M60,80 Q120,5 140,40" stroke="#1f1826" stroke-width="3" fill="none"/>
+                <circle cx="140" cy="40" r="5" fill="#1f1826"/>
+                <path d="M50,80 Q100,-25 110,5" stroke="#1f1826" stroke-width="2.5" fill="none"/>
+                <circle cx="110" cy="5" r="4.5" fill="#1f1826"/>
+              </g>
+
+              <path d="M260,330 C340,325 450,335 600,340 L600,580 C550,540 480,510 440,440 C410,390 330,370 260,330 Z" fill="url(#rockGradFinal)"/>
+              <path d="M250,325 C330,310 440,320 600,325 L600,360 C470,360 380,365 310,345 C280,335 260,330 250,325 Z" fill="url(#snowGradFinal)"/>
+              <path d="M0,490 C120,490 280,480 380,510 C460,535 520,580 600,590 L600,700 L0,700 Z" fill="#4d3759" opacity="0.8"/>
+            </svg>
+          </div>
+
+          <!-- Layer 5: Foreground Winter Trees (Depth: 0.24) -->
+          <div class="parallax-layer layer-trees" data-depth="0.24">
+            <svg class="scene-svg" viewBox="0 0 600 700" preserveAspectRatio="none">
+              <g transform="translate(180, 440)">
+                <ellipse cx="25" cy="180" rx="45" ry="10" fill="#160d1c" opacity="0.3" transform="rotate(-15, 25, 180)"/>
+                <path d="M10,180 L12,90 L2,40 L-10,10 M2,40 L16,15 M12,90 L24,55 L38,20 M24,55 L18,25" stroke="#180e1e" stroke-width="2.8" stroke-linecap="round" fill="none"/>
+                <path d="M6,65 L-4,48 M18,75 L28,62 M-2,25 L-12,18 M12,32 L22,22 M30,35 L40,30" stroke="#180e1e" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+              </g>
+
+              <g transform="translate(260, 410)">
+                <ellipse cx="25" cy="210" rx="55" ry="12" fill="#160d1c" opacity="0.35" transform="rotate(-12, 25, 210)"/>
+                <path d="M12,210 L15,100 L3,45 L-12,8 M3,45 L18,12 M15,100 L28,60 L45,18 M28,60 L20,24" stroke="#180e1e" stroke-width="3" stroke-linecap="round" fill="none"/>
+                <path d="M7,72 L-5,54 M20,85 L32,70 M-3,28 L-14,20 M14,35 L25,24 M35,38 L46,32" stroke="#180e1e" stroke-width="1.9" stroke-linecap="round" fill="none"/>
+              </g>
+
+              <g transform="translate(380, 460)">
+                <ellipse cx="25" cy="160" rx="50" ry="11" fill="#160d1c" opacity="0.35" transform="rotate(-10, 25, 160)"/>
+                <path d="M10,160 L12,80 L2,35 L-10,8 M2,35 L16,12 M12,80 L24,50 L38,18 M24,50 L18,22" stroke="#180e1e" stroke-width="2.7" stroke-linecap="round" fill="none"/>
+                <path d="M6,58 L-4,42 M18,68 L28,55 M-2,22 L-12,15 M12,28 L22,18 M30,32 L40,26" stroke="#180e1e" stroke-width="1.7" stroke-linecap="round" fill="none"/>
+              </g>
+
+              <g transform="translate(110, 480) scale(0.75)">
+                <path d="M10,160 L12,80 L2,35 L-10,8 M2,35 L16,12 M12,80 L24,50 L38,18" stroke="#180e1e" stroke-width="2.8" stroke-linecap="round" fill="none"/>
+              </g>
+            </svg>
+          </div>
+
+          <!-- Layer 6: Floating Particles (SVG dots) -->
+          <div class="parallax-layer layer-particles" data-depth="0.3">
+            <svg class="scene-svg" viewBox="0 0 600 700">
+              <circle cx="50" cy="80" r="1.5" fill="#ffffff" opacity="0.7"/>
+              <circle cx="120" cy="160" r="2" fill="#ffeaa7" opacity="0.8"/>
+              <circle cx="210" cy="90" r="1.5" fill="#ffffff" opacity="0.6"/>
+              <circle cx="340" cy="240" r="2.2" fill="#fed330" opacity="0.75"/>
+              <circle cx="480" cy="120" r="1.8" fill="#ffffff" opacity="0.85"/>
+              <circle cx="530" cy="280" r="1.5" fill="#ffeaa7" opacity="0.6"/>
+            </svg>
+          </div>
+
+        </div>
+
+        <!-- Direct Quote & Carousel Navigation Overlay (Flat, non-nested, matching user's image) -->
+        <div class="scene-text-overlay">
+          <div class="slide-quote-box">
+            <p class="slide-quote-text" id="quoteText">Finally, all your work in one place.</p>
+            <p class="slide-quote-sub" id="quoteSub">Đồng bộ nhiệm vụ, thời gian và sổ thu chi trên một nền tảng duy nhất.</p>
+          </div>
+
+          <div class="visual-controls-row">
+            <div class="slide-dots" role="tablist" aria-label="Bộ chọn trang trình chiếu">
+              <span class="slide-dot active" data-index="0" role="tab" aria-selected="true" title="Trang 1"></span>
+              <span class="slide-dot" data-index="1" role="tab" aria-selected="false" title="Trang 2"></span>
+              <span class="slide-dot" data-index="2" role="tab" aria-selected="false" title="Trang 3"></span>
+            </div>
+
+            <div class="slide-nav-group">
+              <button class="slide-nav-btn" id="prevSlideBtn" aria-label="Trang trước" title="Trang trước">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+              </button>
+              <button class="slide-nav-btn" id="nextSlideBtn" aria-label="Trang kế tiếp" title="Trang kế tiếp">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </article>
+
+  </main>
+
+  <!-- Interactive Feedback Toast -->
+  <div class="status-toast" id="statusToast" role="alert" aria-live="polite">
+    <span class="status-toast-icon" id="toastIcon">✨</span>
+    <span id="toastMsg">Chào mừng bạn! Đang kết nối...</span>
+  </div>
+
+  <script>
+    (function() {
+      const htmlEl = document.documentElement;
+      const viewportStage = document.getElementById('viewportStage');
+      const authCard = document.getElementById('authCard');
+      const parallaxLayers = document.querySelectorAll('.parallax-layer');
+      
+      const themeToggleBtn = document.getElementById('themeToggleBtn');
+      const themeIcon = document.getElementById('themeIcon');
+      const themeLabel = document.getElementById('themeLabel');
+      const viewDesktopBtn = document.getElementById('viewDesktopBtn');
+      const viewMobileBtn = document.getElementById('viewMobileBtn');
+      const parallaxToggleBtn = document.getElementById('parallaxToggleBtn');
+      const parallaxStatus = document.getElementById('parallaxStatus');
+
+      const loginForm = document.getElementById('loginForm');
+      const tabSignIn = document.getElementById('tabSignIn');
+      const tabSignUp = document.getElementById('tabSignUp');
+      const nameGroup = document.getElementById('nameGroup');
+      const formTitle = document.getElementById('formTitle');
+      const formSubtitle = document.getElementById('formSubtitle');
+      const btnText = document.getElementById('btnText');
+      const btnSpinner = document.getElementById('btnSpinner');
+      const recoveryRow = document.getElementById('recoveryRow');
+      const switchModeLink = document.getElementById('switchModeLink');
+      const footerText = document.getElementById('footerText');
+      const togglePasswordBtn = document.getElementById('togglePasswordBtn');
+      const passwordInput = document.getElementById('passwordInput');
+      const eyeIcon = document.getElementById('eyeIcon');
+      const statusToast = document.getElementById('statusToast');
+      const toastMsg = document.getElementById('toastMsg');
+      const toastIcon = document.getElementById('toastIcon');
+
+      const quoteText = document.getElementById('quoteText');
+      const quoteSub = document.getElementById('quoteSub');
+      const prevSlideBtn = document.getElementById('prevSlideBtn');
+      const nextSlideBtn = document.getElementById('nextSlideBtn');
+      const slideDots = document.querySelectorAll('.slide-dot');
+
+      let isDark = false;
+      let currentMode = 'signin';
+      let parallaxEnabled = true;
+      let currentSlide = 0;
+      let autoPlayTimer = null;
+
+      const slides = [
+        {
+          quote: "Finally, all your work in one place.",
+          sub: "Đồng bộ nhiệm vụ, thời gian và sổ thu chi trên một nền tảng duy nhất."
+        },
+        {
+          quote: "Focus on what matters, spend with wisdom.",
+          sub: "Quản lý mục tiêu cá nhân, bảng Pomodoro và ngân sách thông minh."
+        },
+        {
+          quote: "Seamless & Instant Cloud Sync with Supabase.",
+          sub: "Mã hóa an toàn, sao lưu tự động và truy cập tức thì trên mọi thiết bị."
+        }
+      ];
+
+      function showToast(msg, icon = '✨', duration = 3200) {
+        toastMsg.textContent = msg;
+        toastIcon.textContent = icon;
+        statusToast.classList.add('show');
+        clearTimeout(statusToast._timer);
+        statusToast._timer = setTimeout(() => {
+          statusToast.classList.remove('show');
+        }, duration);
+      }
+
+      function setTheme(dark) {
+        isDark = dark;
+        if (dark) {
+          htmlEl.setAttribute('data-theme', 'dark');
+          themeIcon.textContent = '☀️';
+          themeLabel.textContent = 'Chế độ Sáng';
+        } else {
+          htmlEl.setAttribute('data-theme', 'light');
+          themeIcon.textContent = '🌙';
+          themeLabel.textContent = 'Chế độ Tối';
+        }
+      }
+
+      themeToggleBtn.addEventListener('click', () => {
+        setTheme(!isDark);
+        showToast(isDark ? 'Đã chuyển sang giao diện Tối (Espresso)' : 'Đã chuyển sang giao diện Sáng (Latte)', isDark ? '🌙' : '☀️');
+      });
+
+      viewDesktopBtn.addEventListener('click', () => {
+        viewDesktopBtn.classList.add('active');
+        viewMobileBtn.classList.remove('active');
+        viewportStage.classList.remove('simulate-mobile');
+        showToast('Chế độ xem màn hình máy tính (Desktop split view)', '💻');
+      });
+
+      viewMobileBtn.addEventListener('click', () => {
+        viewMobileBtn.classList.add('active');
+        viewDesktopBtn.classList.remove('active');
+        viewportStage.classList.add('simulate-mobile');
+        showToast('Chế độ xem điện thoại (Mobile stacked layout)', '📱');
+      });
+
+      parallaxToggleBtn.addEventListener('click', () => {
+        parallaxEnabled = !parallaxEnabled;
+        parallaxStatus.textContent = parallaxEnabled ? 'BẬT' : 'TẮT';
+        parallaxStatus.style.color = parallaxEnabled ? 'var(--accent-pill)' : '#888';
+        if (!parallaxEnabled) {
+          authCard.style.transform = 'none';
+          parallaxLayers.forEach(layer => layer.style.transform = 'none');
+          showToast('Đã tạm tắt hiệu ứng Parallax', '⏸️');
+        } else {
+          showToast('Đã bật hiệu ứng Parallax đa tầng', '✨');
+        }
+      });
+
+      let mouseX = 0, mouseY = 0;
+      let targetX = 0, targetY = 0;
+
+      function updateMousePos(e) {
+        if (!parallaxEnabled) return;
+        const rect = authCard.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        targetX = Math.max(-1, Math.min(1, (e.clientX - centerX) / (rect.width / 2)));
+        targetY = Math.max(-1, Math.min(1, (e.clientY - centerY) / (rect.height / 2)));
+      }
+
+      window.addEventListener('mousemove', updateMousePos, { passive: true });
+
+      window.addEventListener('deviceorientation', (e) => {
+        if (!parallaxEnabled || !e.gamma || !e.beta) return;
+        targetX = Math.max(-1, Math.min(1, e.gamma / 25));
+        targetY = Math.max(-1, Math.min(1, (e.beta - 40) / 25));
+      }, { passive: true });
+
+      function renderParallax() {
+        if (parallaxEnabled) {
+          mouseX += (targetX - mouseX) * 0.08;
+          mouseY += (targetY - mouseY) * 0.08;
+
+          const tiltX = -mouseY * 4.2;
+          const tiltY = mouseX * 5.2;
+          authCard.style.transform = `perspective(1200px) rotateX(${tiltX.toFixed(2)}deg) rotateY(${tiltY.toFixed(2)}deg)`;
+
+          parallaxLayers.forEach(layer => {
+            const depth = parseFloat(layer.getAttribute('data-depth')) || 0.1;
+            const moveX = (mouseX * depth * 65).toFixed(2);
+            const moveY = (mouseY * depth * 50).toFixed(2);
+            layer.style.transform = `translate3d(${moveX}px, ${moveY}px, 0)`;
+          });
+        }
+        requestAnimationFrame(renderParallax);
+      }
+      renderParallax();
+
+      function setSlide(index) {
+        currentSlide = (index + slides.length) % slides.length;
+        quoteText.style.opacity = '0';
+        quoteText.style.transform = 'translateY(5px)';
+        quoteSub.style.opacity = '0';
+        quoteSub.style.transform = 'translateY(5px)';
+
+        setTimeout(() => {
+          quoteText.textContent = slides[currentSlide].quote;
+          quoteSub.textContent = slides[currentSlide].sub;
+          quoteText.style.opacity = '1';
+          quoteText.style.transform = 'translateY(0)';
+          quoteSub.style.opacity = '1';
+          quoteSub.style.transform = 'translateY(0)';
+
+          slideDots.forEach((dot, idx) => {
+            if (idx === currentSlide) {
+              dot.classList.add('active');
+              dot.setAttribute('aria-selected', 'true');
+            } else {
+              dot.classList.remove('active');
+              dot.setAttribute('aria-selected', 'false');
+            }
+          });
+        }, 200);
+      }
+
+      function startAutoPlay() {
+        clearInterval(autoPlayTimer);
+        autoPlayTimer = setInterval(() => {
+          setSlide(currentSlide + 1);
+        }, 5500);
+      }
+
+      prevSlideBtn.addEventListener('click', () => {
+        setSlide(currentSlide - 1);
+        startAutoPlay();
+      });
+
+      nextSlideBtn.addEventListener('click', () => {
+        setSlide(currentSlide + 1);
+        startAutoPlay();
+      });
+
+      slideDots.forEach(dot => {
+        dot.addEventListener('click', (e) => {
+          const idx = parseInt(e.target.getAttribute('data-index'), 10);
+          setSlide(idx);
+          startAutoPlay();
+        });
+      });
+
+      startAutoPlay();
+
+      function setMode(mode) {
+        currentMode = mode;
+        if (mode === 'signin') {
+          tabSignIn.classList.add('active');
+          tabSignUp.classList.remove('active');
+          tabSignIn.setAttribute('aria-selected', 'true');
+          tabSignUp.setAttribute('aria-selected', 'false');
+
+          formTitle.textContent = "Hello Again!";
+          formSubtitle.textContent = "Let's get started with your 30 days trial";
+          btnText.textContent = "Sign In";
+          recoveryRow.style.display = 'flex';
+          nameGroup.style.display = 'none';
+          footerText.textContent = "Chưa có tài khoản Supabase?";
+          switchModeLink.textContent = "Đăng ký ngay";
+        } else {
+          tabSignUp.classList.add('active');
+          tabSignIn.classList.remove('active');
+          tabSignUp.setAttribute('aria-selected', 'true');
+          tabSignIn.setAttribute('aria-selected', 'false');
+
+          formTitle.textContent = "Tạo tài khoản";
+          formSubtitle.textContent = "Đồng bộ tức thì dữ liệu thời gian & tài chính";
+          btnText.textContent = "Đăng ký tài khoản";
+          recoveryRow.style.display = 'none';
+          nameGroup.style.display = 'block';
+          footerText.textContent = "Đã có tài khoản rồi?";
+          switchModeLink.textContent = "Đăng nhập ngay";
+        }
+      }
+
+      tabSignIn.addEventListener('click', () => setMode('signin'));
+      tabSignUp.addEventListener('click', () => setMode('signup'));
+      switchModeLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        setMode(currentMode === 'signin' ? 'signup' : 'signin');
+      });
+
+      togglePasswordBtn.addEventListener('click', () => {
+        const isPass = passwordInput.getAttribute('type') === 'password';
+        passwordInput.setAttribute('type', isPass ? 'text' : 'password');
+        eyeIcon.innerHTML = isPass 
+          ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>'
+          : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+      });
+
+      recoveryBtn.addEventListener('click', () => {
+        const email = document.getElementById('emailInput').value.trim();
+        if (!email) {
+          showToast('Vui lòng nhập Email để nhận liên kết khôi phục mật khẩu!', '⚠️');
+          document.getElementById('emailInput').focus();
+        } else {
+          showToast(`Đã gửi hướng dẫn khôi phục mật khẩu đến: ${email}`, '📧');
+        }
+      });
+
+      loginForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const email = document.getElementById('emailInput').value.trim();
+        
+        btnSpinner.style.display = 'block';
+        btnText.textContent = currentMode === 'signin' ? 'Đang xác thực...' : 'Đang tạo tài khoản...';
+        
+        setTimeout(() => {
+          btnSpinner.style.display = 'none';
+          btnText.textContent = currentMode === 'signin' ? 'Sign In' : 'Đăng ký tài khoản';
+          showToast(
+            currentMode === 'signin' 
+              ? `Đăng nhập thành công! Chào mừng ${email}` 
+              : `Đã tạo tài khoản thành công cho ${email}!`, 
+            '✅'
+          );
+        }, 1100);
+      });
+
+      document.getElementById('googleBtn').addEventListener('click', () => {
+        showToast('Đang kết nối Supabase Google OAuth Provider...', '🚀');
+      });
+      document.getElementById('appleBtn').addEventListener('click', () => {
+        showToast('Đang kết nối Apple Sign-In Provider...', '🍎');
+      });
+      document.getElementById('supabaseBtn').addEventListener('click', () => {
+        showToast('Đang kiểm tra kết nối Supabase Cloud Database...', '⚡');
+      });
+    })();
+  </script>
+</body>
+</html>

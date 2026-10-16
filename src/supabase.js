@@ -84,6 +84,14 @@ export const authService = {
     return data;
   },
 
+  async resetPassword(email) {
+    if (!supabase) throw new Error('Supabase chưa được cấu hình URL và API Key.');
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + import.meta.env.BASE_URL,
+    });
+    if (error) throw error;
+  },
+
   async signOut() {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();
