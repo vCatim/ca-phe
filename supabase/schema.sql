@@ -116,3 +116,24 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- Người dùng chỉ có thể xóa chính tài khoản đang đăng nhập. Hàm chạy với
+-- quyền của chủ sở hữu schema để có thể xóa auth.users; các bảng public sẽ
+-- tự xóa nhờ các khóa ngoại `on delete cascade` ở trên.
+create or replace function public.delete_own_account()
+returns void
+language plpgsql
+security definer
+set search_path = public, auth
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Bạn cần đăng nhập để xóa tài khoản.';
+  end if;
+
+  delete from auth.users where id = auth.uid();
+end;
+$$;
+
+revoke all on function public.delete_own_account() from public;
+grant execute on function public.delete_own_account() to authenticated;

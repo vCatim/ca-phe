@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { dedupeTasks, taskFingerprint } from './taskIdentity';
 
 export const syncService = {
   // Lấy toàn bộ dữ liệu người dùng từ Supabase
@@ -104,9 +105,20 @@ export const syncService = {
         await supabase.from('groups').upsert(rows);
       }
 
-      // 3. Tasks
+      // 3. Tasks. So sánh với dữ liệu cloud trước khi ghi: cùng lịch từ
+      // localStorage trên máy khác sẽ không tạo thêm một bản sao có id mới.
       if (db.tasks && db.tasks.length) {
-        const rows = db.tasks.map(t => ({
+        const { data: cloudTasks, error: cloudTasksError } = await supabase
+          .from('tasks')
+          .select('id, title, date, start_time, end_time')
+          .eq('user_id', userId);
+        if (cloudTasksError) throw cloudTasksError;
+
+        const cloudKeys = new Set((cloudTasks || []).map(taskFingerprint));
+        const localTasks = dedupeTasks(db.tasks);
+        const rows = localTasks
+          .filter(t => !cloudKeys.has(taskFingerprint(t)) || (cloudTasks || []).some(x => String(x.id) === String(t.id)))
+          .map(t => ({
           id: String(t.id),
           user_id: userId,
           title: t.title,
@@ -117,8 +129,8 @@ export const syncService = {
           pri: t.pri,
           note: t.note || '',
           status: t.status || 'todo',
-        }));
-        await supabase.from('tasks').upsert(rows);
+          }));
+        if (rows.length) await supabase.from('tasks').upsert(rows);
       }
 
       // 4. Goals

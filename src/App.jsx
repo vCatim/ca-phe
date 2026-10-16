@@ -1,10 +1,10 @@
 // ============ CÀ PHÊ — toàn bộ logic của app (React) ============
 // Cấu trúc: 1) tiện ích  2) dữ liệu mẫu + localStorage  3) component nhỏ  4) các trang  5) App gốc
 import React, { useState, useEffect, useRef } from 'react';
-import ICAL from 'ical.js';
 import { authService, isSupabaseConfigured } from './supabase';
 import { syncService } from './supabaseSync';
 import { AuthScreen } from './AuthScreen';
+import { dedupeTasks, mergeUniqueTasks, taskFingerprint } from './taskIdentity';
 
 // ---------- 1) Tiện ích ----------
 const pad = n => String(n).padStart(2, '0');
@@ -382,7 +382,8 @@ function Today({ db, openTx, openTask, openList, openProfile, toggle, delTask })
 
 // Đọc nội dung file .ics → danh sách việc (xuất ra để kiểm thử). Lịch lặp chỉ mở rộng ±6 tháng quanh `now`.
 // EXDATE do ical.js tự loại; buổi bị dời/sửa (RECURRENCE-ID) được gắn vào chuỗi lặp; buổi STATUS:CANCELLED bị bỏ qua.
-export function parseIcs(text, cat = 'Học tập', now = new Date()) {
+export async function parseIcs(text, cat = 'Học tập', now = new Date()) {
+  const { default: ICAL } = await import('ical.js');
   const calendar = new ICAL.Component(ICAL.parse(text));
   const rangeStart = new Date(now); rangeStart.setMonth(rangeStart.getMonth() - 6); rangeStart.setHours(0, 0, 0, 0);
   const rangeEnd = new Date(now); rangeEnd.setMonth(rangeEnd.getMonth() + 6); rangeEnd.setHours(23, 59, 59, 999);
@@ -686,10 +687,15 @@ function ProfileModal({ p, counts, db, cloudUser, theme, toggleTheme, onClose, o
       const user = r.user;
       if (!user) throw new Error('Không lấy được thông tin người dùng.');
 
-      // Đẩy toàn bộ dữ liệu hiện tại từ localStorage lên tài khoản Supabase mới
-      await syncService.uploadAll(user.id, db);
-      if (onCloudLinked) onCloudLinked(user, db);
-      flash(`🎉 Đã liên kết và đồng bộ toàn bộ dữ liệu vào email ${user.email}!`);
+      // Lấy lịch có sẵn trên cloud trước khi đẩy dữ liệu local lên. Điều này
+      // tránh nhân đôi cùng một sự kiện khi người dùng liên kết lại email cũ.
+      const cloud = await syncService.fetchAll(user.id);
+      const mergedDb = { ...db, tasks: mergeUniqueTasks(cloud?.tasks, db.tasks) };
+      const uploaded = await syncService.uploadAll(user.id, mergedDb);
+      if (!uploaded) throw new Error('Không thể đồng bộ dữ liệu lên email, hãy kiểm tra kết nối rồi thử lại.');
+      if (onCloudLinked) onCloudLinked(user, mergedDb);
+      const skipped = Math.max(0, db.tasks.length + (cloud?.tasks?.length || 0) - mergedDb.tasks.length);
+      flash(`🎉 Đã liên kết và đồng bộ vào ${user.email}!${skipped ? ` Đã bỏ qua ${skipped} lịch trùng.` : ''}`);
       setV('menu');
     } catch (err) {
       setAuthMsg({ t: 'err', s: (err && err.message) || 'Có lỗi xảy ra, thử lại sau nhé.' });
@@ -827,21 +833,31 @@ function ProfileModal({ p, counts, db, cloudUser, theme, toggleTheme, onClose, o
             Bạn có chắc chắn muốn xóa tài khoản <strong>"{p.name}"</strong> không?
           </p>
           <div style={{ background: 'color-mix(in srgb,var(--warn) 12%,transparent)', border: '1px solid var(--warn)', borderRadius: 12, padding: 12, fontSize: '.84rem', color: 'var(--warn)', textAlign: 'left', lineHeight: 1.5 }}>
-            Toàn bộ việc cần làm, lịch trình, các khoản chi tiêu và mục tiêu của tài khoản này trên máy sẽ bị <strong>xóa vĩnh viễn</strong> và không thể khôi phục.
+            Toàn bộ việc cần làm, lịch trình, các khoản chi tiêu và mục tiêu sẽ bị <strong>xóa vĩnh viễn</strong> và không thể khôi phục.{cloudUser ? ' Tài khoản Email này cũng sẽ bị xóa khỏi Supabase.' : ' Tài khoản này chỉ được lưu trên máy.'}
           </div>
           <div className="row gap" style={{ marginTop: 10, justifyContent: 'center' }}>
             <button className="btn out" onClick={() => setV('menu')}>Hủy bỏ (Giữ lại)</button>
             <button
               className="btn"
               style={{ background: 'var(--warn)', color: '#fff' }}
-              onClick={() => {
-                onDelete();
-                onClose();
+              disabled={authLoading}
+              onClick={async () => {
+                setAuthLoading(true);
+                setAuthMsg(null);
+                try {
+                  await onDelete(Boolean(cloudUser));
+                  onClose();
+                } catch (error) {
+                  setAuthMsg({ t: 'err', s: (error && error.message) || 'Không thể xóa tài khoản trên cloud. Dữ liệu vẫn được giữ nguyên.' });
+                } finally {
+                  setAuthLoading(false);
+                }
               }}
             >
-              Xác nhận xóa vĩnh viễn
+              {authLoading ? 'Đang xóa...' : 'Xác nhận xóa vĩnh viễn'}
             </button>
           </div>
+          {authMsg && <div className={'au-msg ' + authMsg.t}>{authMsg.s}</div>}
         </div>
       )}
 
@@ -937,10 +953,15 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
   const openGroups = () => setModal({ k: 'groups' });
   const importIcs = async (file, cat = 'Học tập') => {
     let imported;
-    try { imported = parseIcs(await file.text(), cat); }
+    try { imported = await parseIcs(await file.text(), cat); }
     catch (error) { console.error(error); throw new Error('Không đọc được file .ics này.'); }
-    const key = t => `${t.date}|${t.start}|${t.end}|${t.title}`, existing = new Set(db.tasks.map(key));
-    const newTasks = imported.filter(t => { if (existing.has(key(t))) return false; existing.add(key(t)); return true; }); // bỏ việc trùng
+    const existing = new Set(db.tasks.map(taskFingerprint));
+    const newTasks = dedupeTasks(imported).filter(t => {
+      const key = taskFingerprint(t);
+      if (existing.has(key)) return false;
+      existing.add(key);
+      return true;
+    });
     setDb(current => ({ ...current, tasks: [...current.tasks, ...newTasks] }));
     if (cloudUser) {
       newTasks.forEach(task => syncService.upsertTask(cloudUser.id, task));
@@ -1086,9 +1107,10 @@ export default function Root() {
   const [m, setM] = useState(loadMeta), [creating, setCreating] = useState(false);
   useEffect(() => { wr(META, m); document.documentElement.dataset.theme = m.theme; }, [m]);
 
-  const delAccount = (accId) => {
+  const delAccount = async (accId, deleteCloud = false) => {
+    if (deleteCloud) await authService.deleteOwnAccount();
     try { localStorage.removeItem(ACC(accId)); } catch (e) {}
-    authService.signOut().catch(() => {});
+    if (deleteCloud) await authService.signOut().catch(() => {});
     setM(x => ({
       ...x,
       active: x.active === accId ? null : x.active,
@@ -1098,7 +1120,7 @@ export default function Root() {
 
   const handleCloudLinked = (user, linkedDb) => {
     const accountName = user.user_metadata?.full_name || linkedDb.profile?.name || user.email.split('@')[0];
-    wr(ACC(user.id), upgrade(linkedDb));
+    wr(ACC(user.id), upgrade({ ...linkedDb, tasks: dedupeTasks(linkedDb.tasks) }));
     setM(x => {
       const filtered = x.accounts.filter(a => a.id !== x.active && a.id !== user.id);
       return {
@@ -1161,7 +1183,7 @@ export default function Root() {
   };
   if (m.active) return <App key={m.active} id={m.active} theme={m.theme} toggleTheme={() => setM(x => ({ ...x, theme: x.theme === 'dark' ? 'light' : 'dark' }))}
     onLogout={() => { authService.signOut().catch(() => {}); setM({ ...m, active: null }); }} onRename={name => setM(x => ({ ...x, accounts: x.accounts.map(a => a.id === x.active ? { ...a, name } : a) }))}
-    onDelete={() => delAccount(m.active)} onCloudLinked={handleCloudLinked} />;
+    onDelete={deleteCloud => delAccount(m.active, deleteCloud)} onCloudLinked={handleCloudLinked} />;
   if (creating) return <Onboarding onDone={create} onBack={() => setCreating(false)} />;
   return <AuthScreen accounts={m.accounts} onPick={id => setM({ ...m, active: id })} onNew={() => setCreating(true)} onDelAccount={delAccount} onCloudLogin={handleCloudLogin}
     theme={m.theme} toggleTheme={() => setM(x => ({ ...x, theme: x.theme === 'dark' ? 'light' : 'dark' }))} />;

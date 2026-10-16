@@ -4,6 +4,20 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: '/ca-phe/',
+  build: {
+    rollupOptions: {
+      output: {
+        // Tách thư viện ít thay đổi khỏi mã ứng dụng để tận dụng cache trình
+        // duyệt; ical.js còn được tải động khi người dùng thật sự nhập lịch.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('ical.js')) return 'calendar-import';
+          if (id.includes('@supabase')) return 'supabase';
+          if (id.includes('react') || id.includes('scheduler')) return 'react';
+        },
+      },
+    },
+  },
   plugins: [
     react(),
     VitePWA({

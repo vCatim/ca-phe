@@ -108,6 +108,12 @@ export const authService = {
     if (error) throw error;
   },
 
+  async deleteOwnAccount() {
+    if (!supabase) throw new Error('Supabase chưa được cấu hình.');
+    const { error } = await supabase.rpc('delete_own_account');
+    if (error) throw error;
+  },
+
   onAuthStateChange(callback) {
     if (!supabase) return { data: { subscription: { unsubscribe: () => {} } } };
     return supabase.auth.onAuthStateChange(callback);
