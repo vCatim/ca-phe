@@ -13,6 +13,7 @@ const getStoredConfig = () => {
 const stored = getStoredConfig();
 const DEFAULT_URL = 'https://oywnzrsnvscumjqdstdu.supabase.co';
 const DEFAULT_KEY = 'sb_publishable_UgrI5YBxKPEqrv3mdu4rhw_JE1HNmSE';
+const authRedirectUrl = () => window.location.origin + import.meta.env.BASE_URL;
 
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || stored?.url || DEFAULT_URL;
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || stored?.key || DEFAULT_KEY;
@@ -70,6 +71,7 @@ export const authService = {
       email,
       password,
       options: {
+        emailRedirectTo: authRedirectUrl(),
         data: { full_name: fullName || email.split('@')[0] },
       },
     });
@@ -90,14 +92,16 @@ export const authService = {
   async resetPassword(email) {
     if (!supabase) throw new Error('Supabase chưa được cấu hình URL và API Key.');
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: window.location.origin + import.meta.env.BASE_URL,
+      redirectTo: authRedirectUrl(),
     });
     if (error) throw error;
   },
 
   async updateUser(attributes) {
     if (!supabase) throw new Error('Supabase chưa được cấu hình.');
-    const { data, error } = await supabase.auth.updateUser(attributes);
+    const { data, error } = await supabase.auth.updateUser(attributes, {
+      emailRedirectTo: authRedirectUrl(),
+    });
     if (error) throw error;
     return data;
   },
