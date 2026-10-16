@@ -95,6 +95,13 @@ export const authService = {
     if (error) throw error;
   },
 
+  async updateUser(attributes) {
+    if (!supabase) throw new Error('Supabase chưa được cấu hình.');
+    const { data, error } = await supabase.auth.updateUser(attributes);
+    if (error) throw error;
+    return data;
+  },
+
   async signOut() {
     if (!supabase) return;
     const { error } = await supabase.auth.signOut();

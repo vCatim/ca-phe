@@ -638,23 +638,227 @@ function Summary({ db, rg }) {
     <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></div>);
 }
 
-function ProfileModal({ p, counts, theme, toggleTheme, onClose, onSave, onLogout, onDelete, onReset }) {
-  const [v, setV] = useState('menu'), [f, setF] = useState(p), [sure, setSure] = useState(false), [sure2, setSure2] = useState(false), set = (k, x) => setF({ ...f, [k]: x });
-  return (<Modal title={v === 'menu' ? 'Tài khoản' : 'Thông tin cá nhân'} onClose={onClose}>
-    <div className="row gap"><span className="ava">{(p.name[0] || '?').toUpperCase()}</span><div><b>{p.name}</b><small>{counts}</small></div></div>
-    {v === 'menu' ? <>
-      <button className="btn out" onClick={() => setV('info')}>👤 Thông tin cá nhân</button>
-      <button className="btn out" onClick={toggleTheme}>{theme === 'dark' ? '☀️ Chuyển sang giao diện sáng' : '🌙 Chuyển sang giao diện tối'}</button>
-      <button className="btn" onClick={onLogout}>🚪 Đăng xuất</button>
-    </> :
-      <><Field l="Tên"><input value={f.name} onChange={e => set('name', e.target.value)} /></Field>
-        <Field l="Ngân sách chi tiêu / tháng (đ)"><MoneyInput value={f.budget} onChange={x => set('budget', x)} /></Field>
-        <Field l="Thu nhập dự tính / tháng (đ)"><MoneyInput value={f.income} onChange={x => set('income', x)} /></Field>
-        <button className="btn" disabled={!f.name.trim()} onClick={() => onSave({ name: f.name.trim(), budget: +f.budget || 0, income: +f.income || 0 })}>Lưu</button>
-        <button className="btn out" onClick={() => setV('menu')}>← Quay lại</button>
-        <button className="btn out dng" onClick={() => sure2 ? onReset() : setSure2(true)}>{sure2 ? 'Bấm lần nữa để xóa hết việc, giao dịch, mục tiêu' : '🧹 Xóa toàn bộ việc, giao dịch, mục tiêu'}</button>
-        <button className="btn out dng" onClick={() => sure ? onDelete() : setSure(true)}>{sure ? 'Bấm lần nữa để xóa vĩnh viễn' : '🗑 Xóa tài khoản này'}</button></>}
-  </Modal>);
+function ProfileModal({ p, counts, db, cloudUser, theme, toggleTheme, onClose, onSave, onLogout, onDelete, onReset, flash, onCloudLinked }) {
+  const [v, setV] = useState('menu'); // 'menu' | 'info' | 'link_email' | 'change_email' | 'del_confirm'
+  const [f, setF] = useState(p);
+  const [sure2, setSure2] = useState(false);
+  const [linkEmail, setLinkEmail] = useState('');
+  const [linkPw, setLinkPw] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authMsg, setAuthMsg] = useState(null);
+
+  const set = (k, x) => setF({ ...f, [k]: x });
+
+  const doSyncAll = async () => {
+    if (!cloudUser) return;
+    setSyncing(true);
+    try {
+      await syncService.uploadAll(cloudUser.id, db);
+      flash(`🎉 Đã sao lưu toàn bộ ${db.tasks.length} việc, ${db.txs.length} chi tiêu và ${db.goals.length} mục tiêu lên email!`);
+    } catch (e) {
+      flash('❌ Không thể đồng bộ, hãy kiểm tra kết nối mạng.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const doLink = async (isSignUp) => {
+    if (!linkEmail.trim() || !linkPw) {
+      setAuthMsg({ t: 'err', s: 'Vui lòng nhập đầy đủ Email và Mật khẩu.' });
+      return;
+    }
+    setAuthLoading(true);
+    setAuthMsg(null);
+    try {
+      let r;
+      if (isSignUp) {
+        r = await authService.signUp(linkEmail.trim(), linkPw, f.name || p.name);
+        if (r.user && !r.session) {
+          setAuthMsg({ t: 'ok', s: 'Đã gửi email xác nhận! Bạn mở hộp thư bấm vào link xác nhận rồi bấm "Đăng nhập" ở đây nhé.' });
+          setAuthLoading(false);
+          return;
+        }
+      } else {
+        r = await authService.signIn(linkEmail.trim(), linkPw);
+      }
+      const user = r.user;
+      if (!user) throw new Error('Không lấy được thông tin người dùng.');
+
+      // Đẩy toàn bộ dữ liệu hiện tại từ localStorage lên tài khoản Supabase mới
+      await syncService.uploadAll(user.id, db);
+      if (onCloudLinked) onCloudLinked(user, db);
+      flash(`🎉 Đã liên kết và đồng bộ toàn bộ dữ liệu vào email ${user.email}!`);
+      setV('menu');
+    } catch (err) {
+      setAuthMsg({ t: 'err', s: (err && err.message) || 'Có lỗi xảy ra, thử lại sau nhé.' });
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const doChangeEmail = async () => {
+    if (!newEmail.trim() || !newEmail.includes('@')) {
+      flash('⚠️ Vui lòng nhập địa chỉ email hợp lệ.');
+      return;
+    }
+    try {
+      await authService.updateUser({ email: newEmail.trim() });
+      flash(`Đã gửi thư xác nhận đến ${newEmail.trim()}. Hãy mở hộp thư để hoàn tất đổi email nhé!`);
+      setV('menu');
+    } catch (e) {
+      flash((e && e.message) || 'Không thể đổi email, thử lại sau.');
+    }
+  };
+
+  const titles = {
+    menu: 'Tài khoản',
+    info: 'Thông tin cá nhân & Ngân sách',
+    link_email: 'Đồng bộ lên Email',
+    change_email: 'Đổi địa chỉ Email',
+    del_confirm: 'Xác nhận xóa tài khoản',
+  };
+
+  return (
+    <Modal title={titles[v] || 'Tài khoản'} onClose={onClose}>
+      {v === 'menu' && (
+        <>
+          <div className="row gap" style={{ marginBottom: 4 }}>
+            <span className="ava">{(p.name[0] || '?').toUpperCase()}</span>
+            <div>
+              <b>{p.name}</b>
+              <small>{counts}</small>
+            </div>
+          </div>
+
+          {/* Trạng thái liên kết Email và Đồng bộ đám mây */}
+          <div className="card" style={{ padding: '12px 14px', background: 'var(--card2)', borderRadius: 14 }}>
+            {cloudUser ? (
+              <div className="col gap" style={{ gap: 8 }}>
+                <div className="row between s">
+                  <span style={{ color: 'var(--ok)', fontWeight: 600 }}>☁️ Đã liên kết Email</span>
+                  <span className="tag" style={{ background: 'color-mix(in srgb,var(--ok) 18%,transparent)', color: 'var(--ok)' }}>Đang đồng bộ</span>
+                </div>
+                <div style={{ wordBreak: 'break-all' }}>
+                  <b>{cloudUser.email}</b>
+                </div>
+                <p className="mut s" style={{ margin: 0 }}>
+                  Dữ liệu của bạn được tự động sao lưu an toàn trên đám mây Supabase.
+                </p>
+                <div className="row gap wrap" style={{ marginTop: 2 }}>
+                  <button className="btn sm" disabled={syncing} onClick={doSyncAll} style={{ flex: 1 }}>
+                    {syncing ? 'Đang tải...' : '🔄 Tải dữ liệu máy này lên Email'}
+                  </button>
+                  <button className="btn sm out" onClick={() => { setNewEmail(''); setV('change_email'); }}>
+                    ✏️ Đổi email
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="col gap" style={{ gap: 8 }}>
+                <div className="row between s">
+                  <span style={{ color: 'var(--warn)', fontWeight: 600 }}>⚠️ Tài khoản chỉ lưu trên máy này</span>
+                  <span className="tag" style={{ background: 'color-mix(in srgb,var(--warn) 18%,transparent)', color: 'var(--warn)' }}>Chưa có email</span>
+                </div>
+                <p className="mut s" style={{ margin: 0 }}>
+                  Dữ liệu hiện chỉ lưu trên trình duyệt này. Hãy kết nối email để chuyển toàn bộ <b>{db.tasks.length} việc</b>, <b>{db.txs.length} chi tiêu</b> và <b>{db.goals.length} mục tiêu</b> lên đám mây, không lo mất khi đổi máy.
+                </p>
+                <button
+                  className="btn sm"
+                  onClick={() => { setLinkEmail(''); setLinkPw(''); setAuthMsg(null); setV('link_email'); }}
+                  style={{ marginTop: 2 }}
+                >
+                  ☁️ Cập nhật Email để lưu trữ & đồng bộ ngay ➔
+                </button>
+              </div>
+            )}
+          </div>
+
+          <button className="btn out" onClick={() => setV('info')}>👤 Sửa thông tin cá nhân & Ngân sách</button>
+          <button className="btn out" onClick={toggleTheme}>{theme === 'dark' ? '☀️ Chuyển sang giao diện sáng' : '🌙 Chuyển sang giao diện tối'}</button>
+          <button className="btn out" onClick={onLogout}>🚪 Đăng xuất</button>
+          <button className="btn out dng" onClick={() => setV('del_confirm')}>🗑 Xóa tài khoản này</button>
+        </>
+      )}
+
+      {v === 'link_email' && (
+        <div className="col gap">
+          <p className="mut s" style={{ margin: 0, lineHeight: 1.5 }}>
+            Nhập email và mật khẩu. Toàn bộ <b>{db.tasks.length} việc</b>, <b>{db.txs.length} chi tiêu</b> và <b>{db.goals.length} mục tiêu</b> hiện có trên máy này sẽ được tải thẳng lên email của bạn!
+          </p>
+          <Field l="Địa chỉ Email">
+            <input type="email" value={linkEmail} onChange={e => setLinkEmail(e.target.value)} placeholder="VD: yourname@gmail.com" autoFocus />
+          </Field>
+          <Field l="Mật khẩu (tối thiểu 6 ký tự)">
+            <input type="password" value={linkPw} onChange={e => setLinkPw(e.target.value)} placeholder="••••••••" minLength={6} />
+          </Field>
+          {authMsg && <div className={'au-msg ' + authMsg.t}>{authMsg.s}</div>}
+          <div className="col gap" style={{ marginTop: 6 }}>
+            <button className="btn" disabled={authLoading} onClick={() => doLink(false)}>
+              {authLoading ? 'Đang xử lý...' : 'Đăng nhập & Tải dữ liệu lên Email'}
+            </button>
+            <button className="btn out" disabled={authLoading} onClick={() => doLink(true)}>
+              {authLoading ? 'Đang xử lý...' : 'Tạo tài khoản mới & Tải dữ liệu lên'}
+            </button>
+            <button className="btn sm out" onClick={() => setV('menu')}>← Quay lại</button>
+          </div>
+        </div>
+      )}
+
+      {v === 'change_email' && (
+        <div className="col gap">
+          <p className="mut s" style={{ margin: 0 }}>
+            Email hiện tại: <b>{cloudUser?.email}</b>. Nhập địa chỉ email mới mà bạn muốn đổi sang:
+          </p>
+          <Field l="Địa chỉ Email mới">
+            <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="VD: emailmoi@gmail.com" autoFocus />
+          </Field>
+          <button className="btn" onClick={doChangeEmail}>Gửi yêu cầu đổi email</button>
+          <button className="btn out" onClick={() => setV('menu')}>← Quay lại</button>
+        </div>
+      )}
+
+      {v === 'del_confirm' && (
+        <div className="col gap" style={{ textAlign: 'center', padding: '6px 0' }}>
+          <div style={{ fontSize: '2.5rem' }}>⚠️</div>
+          <h3 style={{ color: 'var(--warn)', margin: 0 }}>Xác nhận xóa tài khoản?</h3>
+          <p className="mut s" style={{ margin: 0 }}>
+            Bạn có chắc chắn muốn xóa tài khoản <strong>"{p.name}"</strong> không?
+          </p>
+          <div style={{ background: 'color-mix(in srgb,var(--warn) 12%,transparent)', border: '1px solid var(--warn)', borderRadius: 12, padding: 12, fontSize: '.84rem', color: 'var(--warn)', textAlign: 'left', lineHeight: 1.5 }}>
+            Toàn bộ việc cần làm, lịch trình, các khoản chi tiêu và mục tiêu của tài khoản này trên máy sẽ bị <strong>xóa vĩnh viễn</strong> và không thể khôi phục.
+          </div>
+          <div className="row gap" style={{ marginTop: 10, justifyContent: 'center' }}>
+            <button className="btn out" onClick={() => setV('menu')}>Hủy bỏ (Giữ lại)</button>
+            <button
+              className="btn"
+              style={{ background: 'var(--warn)', color: '#fff' }}
+              onClick={() => {
+                onDelete();
+                onClose();
+              }}
+            >
+              Xác nhận xóa vĩnh viễn
+            </button>
+          </div>
+        </div>
+      )}
+
+      {v === 'info' && (
+        <>
+          <Field l="Tên"><input value={f.name} onChange={e => set('name', e.target.value)} /></Field>
+          <Field l="Ngân sách chi tiêu / tháng (đ)"><MoneyInput value={f.budget} onChange={x => set('budget', x)} /></Field>
+          <Field l="Thu nhập dự tính / tháng (đ)"><MoneyInput value={f.income} onChange={x => set('income', x)} /></Field>
+          <button className="btn" disabled={!f.name.trim()} onClick={() => onSave({ name: f.name.trim(), budget: +f.budget || 0, income: +f.income || 0 })}>Lưu thay đổi</button>
+          <button className="btn out" onClick={() => setV('menu')}>← Quay lại</button>
+          <button className="btn out dng" onClick={() => sure2 ? onReset() : setSure2(true)}>
+            {sure2 ? 'Bấm lần nữa để xóa hết việc, giao dịch, mục tiêu' : '🧹 Xóa toàn bộ việc, giao dịch, mục tiêu'}
+          </button>
+        </>
+      )}
+    </Modal>
+  );
 }
 
 function GroupsModal({ groups, onClose, onAdd, onRemove }) {
@@ -668,7 +872,7 @@ function GroupsModal({ groups, onClose, onAdd, onRemove }) {
 
 // ---------- 5) App gốc ----------
 const NAV = [['today', '🏠', 'Trang chính'], ['cal', '📅', 'Lịch'], ['fin', '💰', 'Tài chính'], ['goal', '🎯', 'Mục tiêu']];
-function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
+function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLinked }) {
   const [db, setDb] = useState(() => loadDb(id)), [page, setPage] = useState('today'), [modal, setModal] = useState(null), [clip, setClip] = useState(null), [toast, setToast] = useState(null), tt = useRef(null);
   const [cloudUser, setCloudUser] = useState(null);
 
@@ -845,7 +1049,34 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete }) {
     {modal?.k === 'task' && <TaskForm item={modal.it} onSave={saveTask} onClose={() => setModal(null)} onDel={id => { delTask(id); setModal(null); }} />}
     {modal?.k === 'tx' && <TxForm item={modal.it} onSave={saveTx} onClose={() => setModal(null)} />}
     {modal?.k === 'goal' && <GoalForm item={modal.it} onSave={g => upsert('goals', g)} onClose={() => setModal(null)} />}
-    {modal?.k === 'profile' && <ProfileModal p={db.profile} counts={`${db.tasks.length} việc · ${db.txs.length} giao dịch · ${db.goals.length} mục tiêu`} onClose={() => setModal(null)} onSave={p => { setDb(d => ({ ...d, profile: p })); if (cloudUser) syncService.saveProfile(cloudUser.id, p); onRename(p.name); setModal(null); }} theme={theme} toggleTheme={toggleTheme} onLogout={onLogout} onDelete={onDelete} onReset={() => { setDb(d => ({ ...d, tasks: [], txs: [], goals: [] })); setModal(null); }} />}
+    {modal?.k === 'profile' && (
+      <ProfileModal
+        p={db.profile}
+        counts={`${db.tasks.length} việc · ${db.txs.length} giao dịch · ${db.goals.length} mục tiêu`}
+        db={db}
+        cloudUser={cloudUser}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        onClose={() => setModal(null)}
+        onSave={p => {
+          setDb(d => ({ ...d, profile: p }));
+          if (cloudUser) syncService.saveProfile(cloudUser.id, p);
+          onRename(p.name);
+          setModal(null);
+        }}
+        onLogout={onLogout}
+        onDelete={onDelete}
+        onReset={() => {
+          setDb(d => ({ ...d, tasks: [], txs: [], goals: [] }));
+          setModal(null);
+        }}
+        flash={flash}
+        onCloudLinked={(user, linkedDb) => {
+          setCloudUser(user);
+          if (onCloudLinked) onCloudLinked(user, linkedDb);
+        }}
+      />
+    )}
     {modal?.k === 'groups' && <GroupsModal groups={db.groups} onClose={() => setModal(null)} onAdd={name => setDb(d => ({ ...d, groups: [...d.groups, { name, share: .1, color: PAL[d.groups.length % PAL.length] }] }))} onRemove={name => setDb(d => ({ ...d, groups: d.groups.filter(g => g.name !== name) }))} />}
     {modal?.k === 'list' && <TxList db={db} type={modal.type} date={modal.date} onClose={() => setModal(null)} onAdd={() => openTx(modal.type, { date: modal.date || today() })} onEdit={x => openTx(x.type, x)} onDel={id => del('txs', id)} />}
   </div>);
@@ -855,17 +1086,46 @@ export default function Root() {
   const [m, setM] = useState(loadMeta), [creating, setCreating] = useState(false);
   useEffect(() => { wr(META, m); document.documentElement.dataset.theme = m.theme; }, [m]);
 
+  const delAccount = (accId) => {
+    try { localStorage.removeItem(ACC(accId)); } catch (e) {}
+    authService.signOut().catch(() => {});
+    setM(x => ({
+      ...x,
+      active: x.active === accId ? null : x.active,
+      accounts: x.accounts.filter(a => a.id !== accId),
+    }));
+  };
+
+  const handleCloudLinked = (user, linkedDb) => {
+    const accountName = user.user_metadata?.full_name || linkedDb.profile?.name || user.email.split('@')[0];
+    wr(ACC(user.id), upgrade(linkedDb));
+    setM(x => {
+      const filtered = x.accounts.filter(a => a.id !== x.active && a.id !== user.id);
+      return {
+        ...x,
+        active: user.id,
+        accounts: [...filtered, { id: user.id, name: accountName }],
+      };
+    });
+  };
+
   const handleCloudLogin = (user, cloudData) => {
     const accountName = user.user_metadata?.full_name || cloudData?.profile?.name || user.email.split('@')[0];
     const existing = m.accounts.find(a => a.id === user.id);
 
     // Kiểm tra xem trên máy này có dữ liệu local trước đó không (ví dụ tài khoản người dùng đang dùng thử)
-    const prevAcc = m.accounts.find(a => a.id !== user.id);
-    const prevDb = prevAcc ? rd(ACC(prevAcc.id)) : null;
+    const activeAcc = m.accounts.find(a => a.id === m.active) || m.accounts[0];
+    const prevDb = activeAcc ? rd(ACC(activeAcc.id)) : null;
     const hasLocalData = prevDb && (prevDb.tasks?.length || prevDb.txs?.length || prevDb.goals?.length);
 
     if (existing) {
-      if (cloudData) wr(ACC(user.id), upgrade(cloudData));
+      if (cloudData && (cloudData.tasks?.length || cloudData.txs?.length || cloudData.goals?.length)) {
+        wr(ACC(user.id), upgrade(cloudData));
+      } else if (hasLocalData) {
+        // Tài khoản cloud chưa có dữ liệu nhưng máy có dữ liệu -> đẩy lên cloud
+        syncService.uploadAll(user.id, prevDb).catch(console.error);
+        wr(ACC(user.id), upgrade(prevDb));
+      }
       setM({ ...m, active: user.id });
     } else {
       let initialData;
@@ -901,9 +1161,9 @@ export default function Root() {
   };
   if (m.active) return <App key={m.active} id={m.active} theme={m.theme} toggleTheme={() => setM(x => ({ ...x, theme: x.theme === 'dark' ? 'light' : 'dark' }))}
     onLogout={() => { authService.signOut().catch(() => {}); setM({ ...m, active: null }); }} onRename={name => setM(x => ({ ...x, accounts: x.accounts.map(a => a.id === x.active ? { ...a, name } : a) }))}
-    onDelete={() => { try { localStorage.removeItem(ACC(m.active)); } catch (e) {} setM({ ...m, active: null, accounts: m.accounts.filter(a => a.id !== m.active) }); }} />;
+    onDelete={() => delAccount(m.active)} onCloudLinked={handleCloudLinked} />;
   if (creating) return <Onboarding onDone={create} onBack={() => setCreating(false)} />;
-  return <AuthScreen accounts={m.accounts} onPick={id => setM({ ...m, active: id })} onNew={() => setCreating(true)} onCloudLogin={handleCloudLogin}
+  return <AuthScreen accounts={m.accounts} onPick={id => setM({ ...m, active: id })} onNew={() => setCreating(true)} onDelAccount={delAccount} onCloudLogin={handleCloudLogin}
     theme={m.theme} toggleTheme={() => setM(x => ({ ...x, theme: x.theme === 'dark' ? 'light' : 'dark' }))} />;
 }
 

@@ -76,10 +76,21 @@ const Field = ({ icon, label, children, extra, hasVal }) => (
   </label>
 );
 
-export function AuthScreen({ accounts = [], onPick, onNew, onCloudLogin, theme, toggleTheme }) {
+export function AuthScreen({ accounts = [], onPick, onNew, onDelAccount, onCloudLogin, theme, toggleTheme }) {
   const [tab, setTab] = useState('login'), [name, setName] = useState(''), [email, setEmail] = useState(''), [pw, setPw] = useState('');
   const [show, setShow] = useState(false), [loading, setLoading] = useState(false), [msg, setMsg] = useState(null), [out, setOut] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(null);
   const login = tab === 'login';
+
+  // Tự động xóa sạch nếu trình duyệt tự điền URL hoặc API Key Supabase cũ vào ô Email / Mật khẩu
+  useEffect(() => {
+    if (email && (email.includes('supabase.co') || email.startsWith('sb_') || email.startsWith('eyJ') || email.length > 50)) {
+      setEmail('');
+    }
+    if (pw && (pw.startsWith('sb_') || pw.startsWith('eyJ') || pw.length > 40)) {
+      setPw('');
+    }
+  }, [email, pw]);
 
   const enter = async user => {
     let cloud = null;
@@ -101,14 +112,20 @@ export function AuthScreen({ accounts = [], onPick, onNew, onCloudLogin, theme, 
     try { await authService.resetPassword(email.trim()); setMsg({ t: 'ok', s: 'Đã gửi email đặt lại mật khẩu, kiểm tra hộp thư nhé.' }); }
     catch (err) { setMsg({ t: 'err', s: errVi(err) }); }
   };
-  const swap = t => { setTab(t); setMsg(null); };
+  const swap = t => {
+    setTab(t);
+    setMsg(null);
+    setEmail('');
+    setPw('');
+    setName('');
+  };
 
   return (
     <div className={'au-wrap' + (out ? ' au-out' : '')}>
       <div className="au-bg"><i /><i /></div>
       <button className="au-theme" onClick={toggleTheme} aria-label="Đổi giao diện sáng/tối">{theme === 'dark' ? '☀️' : '🌙'}</button>
       <div className="au-card">
-        <form className="au-form" onSubmit={submit}>
+        <form className="au-form" onSubmit={submit} autoComplete="off">
           <div className="au-h" key={tab} style={{ '--i': 0 }}>
             <h1>{login ? 'Chào mừng trở lại!' : 'Tạo tài khoản mới'}</h1>
             <p>{login ? 'Đăng nhập để đồng bộ lịch, thu chi và mục tiêu trên mọi thiết bị.' : 'Chỉ mất một phút, dữ liệu của bạn được lưu an toàn trên đám mây.'}</p>
@@ -119,9 +136,9 @@ export function AuthScreen({ accounts = [], onPick, onNew, onCloudLogin, theme, 
           </div>
           <div className="au-fields" style={{ '--i': 2 }}>
             <div className={'au-col' + (!login ? ' open' : '')}><div>
-              <Field icon="user" label="Tên của bạn" hasVal={Boolean(name)}><input value={name} onChange={e => setName(e.target.value)} placeholder=" " autoComplete="name" tabIndex={login ? -1 : 0} /></Field>
+              <Field icon="user" label="Tên của bạn" hasVal={Boolean(name)}><input value={name} onChange={e => setName(e.target.value)} placeholder=" " autoComplete="off" tabIndex={login ? -1 : 0} /></Field>
             </div></div>
-            <Field icon="mail" label="Email" hasVal={Boolean(email)}><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder=" " autoComplete="email" required /></Field>
+            <Field icon="mail" label="Email" hasVal={Boolean(email)}><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder=" " autoComplete="off" name="caphe_user_email" required /></Field>
             <Field
               icon="lock"
               label="Mật khẩu"
@@ -132,7 +149,7 @@ export function AuthScreen({ accounts = [], onPick, onNew, onCloudLogin, theme, 
                 </button>
               }
             >
-              <input type={show ? 'text' : 'password'} value={pw} onChange={e => setPw(e.target.value)} placeholder=" " minLength={6} autoComplete={login ? 'current-password' : 'new-password'} required />
+              <input type={show ? 'text' : 'password'} value={pw} onChange={e => setPw(e.target.value)} placeholder=" " minLength={6} autoComplete="new-password" name="caphe_user_pw" required />
             </Field>
           </div>
           <div className="au-row" style={{ '--i': 3 }}>{login ? <button type="button" className="au-link" onClick={forgot}>Quên mật khẩu?</button> : <span />}</div>
@@ -140,12 +157,61 @@ export function AuthScreen({ accounts = [], onPick, onNew, onCloudLogin, theme, 
           <button className="au-go" disabled={loading} style={{ '--i': 4 }}>{loading ? <span className="au-spin" /> : <>{login ? 'Đăng nhập' : 'Tạo tài khoản'} <b>→</b></>}</button>
           <div className="au-or" style={{ '--i': 5 }}>hoặc dùng trên máy này</div>
           <div className="au-accs" style={{ '--i': 6 }}>
-            {accounts.map(a => <button type="button" key={a.id} className="au-chip" onClick={() => onPick(a.id)}><span className="ava">{(a.name[0] || '?').toUpperCase()}</span>{a.name}</button>)}
+            {accounts.map(a => (
+              <div key={a.id} className="au-chip-box">
+                <button type="button" className="au-chip" onClick={() => onPick(a.id)}>
+                  <span className="ava">{(a.name[0] || '?').toUpperCase()}</span>
+                  {a.name}
+                </button>
+                {onDelAccount && (
+                  <button
+                    type="button"
+                    className="au-chip-del"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setConfirmDel(a);
+                    }}
+                    title={`Xóa tài khoản ${a.name}`}
+                    aria-label={`Xóa tài khoản ${a.name}`}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
             <button type="button" className="au-chip try" onClick={onNew}>+ Dùng thử, không cần tài khoản</button>
           </div>
         </form>
         <Scene />
       </div>
+
+      {confirmDel && (
+        <div className="au-modal-ov" onClick={() => setConfirmDel(null)}>
+          <div className="au-modal" onClick={e => e.stopPropagation()}>
+            <div className="au-modal-h">
+              <span style={{ fontSize: '1.6rem' }}>⚠️</span>
+              <h3>Xác nhận xóa tài khoản?</h3>
+            </div>
+            <p style={{ color: 'var(--mut)', fontSize: '.9rem', margin: '12px 0 16px', lineHeight: 1.5 }}>
+              Bạn có chắc chắn muốn xóa tài khoản <strong>"{confirmDel.name}"</strong> khỏi máy này không? Toàn bộ việc cần làm, chi tiêu và mục tiêu đã lưu trên máy sẽ bị xóa vĩnh viễn.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn sm out" onClick={() => setConfirmDel(null)}>Hủy bỏ (Giữ lại)</button>
+              <button
+                type="button"
+                className="btn sm"
+                style={{ background: 'var(--warn)', color: '#fff' }}
+                onClick={() => {
+                  onDelAccount(confirmDel.id);
+                  setConfirmDel(null);
+                }}
+              >
+                Xác nhận xóa vĩnh viễn
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
