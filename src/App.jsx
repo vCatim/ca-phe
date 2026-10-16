@@ -271,6 +271,27 @@ function TxList({ db, type, date, onClose, onAdd, onEdit, onDel }) {
 }
 function GoalForm({ item, onSave, onClose }) {
   const [f, setF] = useState(item); const set = (k, v) => setF({ ...f, [k]: v }), isMoney = f.unit.trim() === 'đ';
+  const bad = !f.title.trim() || !(+f.target > 0);
+
+  const handleSave = () => {
+    const { asum, ...r } = f;
+    const isEdit = !!item.id;
+    const currentEdited = isEdit && (+f.current !== item.current);
+    // Nếu người dùng chủ động sửa số tiền "Hiện có", lấy chính xác giá trị đó. Nếu không sửa, giữ nguyên gốc.
+    const finalCurrent = currentEdited || !isEdit
+      ? Math.max(0, +f.current || 0)
+      : Math.max(0, (+f.current || 0) - (asum || 0));
+
+    onSave({
+      ...r,
+      id: f.id || uid(),
+      target: +f.target,
+      pri: f.pri || 'Trung bình',
+      auto: isMoney && !!f.auto,
+      current: finalCurrent
+    }, currentEdited);
+  };
+
   return (<Modal title={item.id ? 'Sửa mục tiêu' : 'Mục tiêu mới'} onClose={onClose}>
     <Field l="Tên mục tiêu"><input value={f.title} onChange={e => set('title', e.target.value)} autoFocus /></Field>
     <div className="grid2"><Field l="Hiện có"><MoneyInput value={f.current} onChange={v => set('current', v)} /></Field>
@@ -278,7 +299,7 @@ function GoalForm({ item, onSave, onClose }) {
     <Field l="Đơn vị (đ, cuốn, buổi...)"><input value={f.unit} onChange={e => set('unit', e.target.value)} /></Field>
     <Field l="Mức ưu tiên"><select value={f.pri || 'Trung bình'} onChange={e => set('pri', e.target.value)}>{PRI.map(c => <option key={c}>{c}</option>)}</select></Field>
     {isMoney && <label className="row gap s"><input type="checkbox" style={{ width: 'auto' }} checked={!!f.auto} onChange={e => set('auto', e.target.checked)} /> Tự động cập nhật theo thu/chi</label>}
-    <button className="btn" disabled={!f.title.trim() || !(+f.target > 0)} onClick={() => { const { asum, ...r } = f; onSave({ ...r, id: f.id || uid(), target: +f.target, pri: f.pri || 'Trung bình', auto: isMoney && !!f.auto, current: Math.max(0, (+f.current || 0) - (asum || 0)) }); }}>Lưu</button></Modal>);
+    <button className="btn" disabled={bad} onClick={handleSave}>Lưu</button></Modal>);
 }
 
 // ---------- Onboarding ----------
@@ -306,10 +327,10 @@ function Hop({ name }) {
   const part = t => [...t].map(c => <span key={i} aria-hidden="true" style={{ '--i': i++ }}>{c}</span>);
   return <h1 className="hop" aria-label={`Chào ${name} ☕`}>{part('Chào ')}<span className="nm">{part(name)}</span>{part(' ☕')}</h1>;
 }
-function Today({ db, openTx, openTask, openList, openProfile, toggle, delTask }) {
-  const [curDate, setCurDate] = useState(today()), [dir, setDir] = useState(''), [pick, setPick] = useState(false);
+function Today({ db, openTx, openTask, openList, openProfile, toggle, delTask, curDate = today(), setCurDate }) {
+  const [dir, setDir] = useState(''), [pick, setPick] = useState(false);
   const p = db.profile, dayBudget = p.budget / 30, isToday = curDate === today();
-  const go = d => { setDir(d > curDate ? 'n' : 'p'); setCurDate(d); }; // nhớ hướng để trượt đúng chiều
+  const go = d => { setDir(d > curDate ? 'n' : 'p'); if (setCurDate) setCurDate(d); }; // nhớ hướng để trượt đúng chiều
   const curD = new Date(curDate + 'T00:00'), dmy = curDate.split('-').reverse().join('/');
   const tasks = db.tasks.filter(x => x.date === curDate).sort((a, b) => a.start.localeCompare(b.start));
   const tx = db.txs.filter(x => x.date === curDate && isEff(db, x));
@@ -891,6 +912,7 @@ const NAV = [['today', '🏠', 'Trang chính'], ['cal', '📅', 'Lịch'], ['fin
 function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLinked }) {
   const [db, setDb] = useState(() => loadDb(id)), [page, setPage] = useState('today'), [modal, setModal] = useState(null), [clip, setClip] = useState(null), [toast, setToast] = useState(null), tt = useRef(null);
   const [cloudUser, setCloudUser] = useState(null);
+  const [homeDate, setHomeDate] = useState(today());
 
   useEffect(() => {
     authService.getUser().then(u => setCloudUser(u)).catch(() => {});
@@ -937,7 +959,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
         date: today(),
         note: '',
         taskId: '',
-        autoGoal: true,
+        autoGoal: it && it.autoGoal !== undefined ? it.autoGoal : true,
         goalId: '',
         ...it,
         grp: gl.includes(it?.grp) ? it.grp : 'Khác',
@@ -968,6 +990,35 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
     }
     return { added: newTasks.length, skipped: imported.length - newTasks.length };
   };
+  const saveGoal = (g, currentEdited) => {
+    setDb(d => {
+      let txs = d.txs;
+      // Nếu người dùng chủ động sửa số tiền "Hiện có", xóa các phân bổ alloc cũ vào mục tiêu này
+      // để số tiền hiện có hiển thị chính xác con số người dùng vừa nhập
+      if (currentEdited && g.id) {
+        txs = txs.map(x => {
+          if (!x.alloc || !(g.id in x.alloc)) return x;
+          const { [g.id]: _del, ...restAlloc } = x.alloc;
+          return { ...x, alloc: Object.keys(restAlloc).length ? restAlloc : null };
+        });
+      }
+      const goals = d.goals.some(x => x.id === g.id)
+        ? d.goals.map(x => x.id === g.id ? g : x)
+        : [...d.goals, g];
+      return { ...d, goals, txs };
+    });
+    if (cloudUser) {
+      syncService.upsertGoal(cloudUser.id, g);
+      if (currentEdited && g.id) {
+        db.txs.filter(x => x.alloc && (g.id in x.alloc)).forEach(x => {
+          const { [g.id]: _del, ...restAlloc } = x.alloc;
+          syncService.upsertTx(cloudUser.id, { ...x, alloc: Object.keys(restAlloc).length ? restAlloc : null });
+        });
+      }
+    }
+    flash(`Đã lưu mục tiêu: "${g.title}"`);
+    setModal(null);
+  };
   const saveTx = t => { // khoản hiệu lực (không gắn việc / việc đã xong) được chia ngay vào mục tiêu tự động; khoản chờ thì chưa
     const old = db.txs.find(x => x.id === t.id), signed = x => x.type === 'income' ? x.amount : -x.amount, task = t.taskId && db.tasks.find(k => k.id === t.taskId);
     const eff = !task || task.status === 'done', { alloc: _o, ...base } = t;
@@ -976,9 +1027,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
       if (t.goalId) {
         alloc = { [t.goalId]: signed(t) };
       } else {
-        alloc = old && old.alloc && signed(old) === signed(t) && !old.goalId
-          ? old.alloc
-          : splitAlloc({ ...db, txs: db.txs.filter(x => x.id !== t.id) }, signed(t));
+        alloc = splitAlloc({ ...db, txs: db.txs.filter(x => x.id !== t.id) }, signed(t));
       }
     }
     const nt = alloc ? { ...base, alloc } : { ...base, alloc: null };
@@ -996,17 +1045,41 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
       clean.status = 'todo';
       flash('⚠️ Chưa đến ngày nên chưa thể hoàn thành việc này');
     }
-    setDb(d => { const old = d.tasks.find(x => x.id === clean.id), nd = { ...d, tasks: old ? d.tasks.map(x => x.id === clean.id ? clean : x) : [...d.tasks, clean] }, was = !!old && old.status === 'done', now = clean.status === 'done';
-      return was === now ? nd : { ...nd, txs: retarget(nd, clean.id, now) }; });
+    setDb(d => {
+      const old = d.tasks.find(x => x.id === clean.id), nd = { ...d, tasks: old ? d.tasks.map(x => x.id === clean.id ? clean : x) : [...d.tasks, clean] }, was = !!old && old.status === 'done', now = clean.status === 'done';
+      if (was === now) return nd;
+      const updatedTxs = retarget(nd, clean.id, now);
+      if (cloudUser) {
+        updatedTxs.filter(x => x.taskId === clean.id).forEach(x => syncService.upsertTx(cloudUser.id, x));
+      }
+      return { ...nd, txs: updatedTxs };
+    });
     if (cloudUser) syncService.upsertTask(cloudUser.id, clean);
     flash(`Đã lưu: "${clean.title}"`);
     setModal(null);
   };
-  const delTask = id => { const t = db.tasks.find(x => x.id === id); if (!t) return;
-    setDb(d => { const nd = { ...d, tasks: d.tasks.filter(x => x.id !== id) }; return t.status === 'done' ? nd : { ...nd, txs: retarget(nd, id, true) }; }); // việc bị xóa → khoản gắn với nó thành khoản thường
+  const delTask = id => {
+    const t = db.tasks.find(x => x.id === id); if (!t) return;
+    setDb(d => {
+      const nd = { ...d, tasks: d.tasks.filter(x => x.id !== id) };
+      if (t.status === 'done') return nd;
+      const updatedTxs = retarget(nd, id, true);
+      if (cloudUser) {
+        updatedTxs.filter(x => x.taskId === id).forEach(x => syncService.upsertTx(cloudUser.id, x));
+      }
+      return { ...nd, txs: updatedTxs };
+    });
     if (cloudUser) syncService.deleteTask(cloudUser.id, id);
     flash('Đã xóa', () => {
-      setDb(d => { const nd = { ...d, tasks: [...d.tasks, t] }; return t.status === 'done' ? nd : { ...nd, txs: retarget(nd, id, false) }; });
+      setDb(d => {
+        const nd = { ...d, tasks: [...d.tasks, t] };
+        if (t.status === 'done') return nd;
+        const updatedTxs = retarget(nd, id, false);
+        if (cloudUser) {
+          updatedTxs.filter(x => x.taskId === id).forEach(x => syncService.upsertTx(cloudUser.id, x));
+        }
+        return { ...nd, txs: updatedTxs };
+      });
       if (cloudUser) syncService.upsertTask(cloudUser.id, t);
       setToast(null);
     });
@@ -1048,7 +1121,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
     }
   };
   const bump = g => upsert('goals', { ...g, current: g.current + 1 });
-  const P = { db, openTx, openTask, openGoal, openList, openProfile, openGroups, clip, setClip, pasteClip, toggle, delTask, toggleAuto, cyclePri, delTx: id => del('txs', id), delGoal: id => del('goals', id), bump, importIcs };
+  const P = { db, openTx, openTask, openGoal, openList, openProfile, openGroups, clip, setClip, pasteClip, toggle, delTask, toggleAuto, cyclePri, delTx: id => del('txs', id), delGoal: id => del('goals', id), bump, importIcs, curDate: homeDate, setCurDate: setHomeDate };
   return (<div className="app">
     <aside className="side"><div className="logo"><LogoIcon s={34} /> Cà Phê</div><small className="mut">Quản lý cuộc sống sinh viên</small>
       <nav>{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav>
@@ -1069,7 +1142,7 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
     {toast && <div className="toast"><span>{toast.msg}</span>{toast.undo && <button onClick={toast.undo}>Hoàn tác</button>}</div>}
     {modal?.k === 'task' && <TaskForm item={modal.it} onSave={saveTask} onClose={() => setModal(null)} onDel={id => { delTask(id); setModal(null); }} />}
     {modal?.k === 'tx' && <TxForm item={modal.it} onSave={saveTx} onClose={() => setModal(null)} />}
-    {modal?.k === 'goal' && <GoalForm item={modal.it} onSave={g => upsert('goals', g)} onClose={() => setModal(null)} />}
+    {modal?.k === 'goal' && <GoalForm item={modal.it} onSave={saveGoal} onClose={() => setModal(null)} />}
     {modal?.k === 'profile' && (
       <ProfileModal
         p={db.profile}
