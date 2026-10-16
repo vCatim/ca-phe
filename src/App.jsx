@@ -11,7 +11,10 @@ const pad = n => String(n).padStart(2, '0');
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const today = () => iso(new Date());
 const addDays = (s, n) => { const d = new Date(s + 'T00:00'); d.setDate(d.getDate() + n); return iso(d); };
-const wkStart = s => addDays(s, -new Date(s + 'T00:00').getDay());
+const wkStart = s => {
+  const day = new Date(s + 'T00:00').getDay();
+  return addDays(s, day === 0 ? -6 : 1 - day);
+};
 const dBetween = (a, b) => Math.round((new Date(b + 'T00:00') - new Date(a + 'T00:00')) / 864e5);
 const addMonths = (s, n) => { const d = new Date(s + 'T00:00'), day = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + n); d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())); return iso(d); };
 const WD = ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy'];
@@ -19,7 +22,7 @@ const dots = n => String(Math.round(+n || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '
 const money = n => dots(n) + 'đ';
 const uid = () => Math.random().toString(36).slice(2, 9);
 const toMin = t => +t.slice(0, 2) * 60 + +t.slice(3);
-const DAYS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const DAYS = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'];
 
 const CATS = ['Học tập', 'Bài tập', 'Dự án', 'Cá nhân', 'Sức khỏe'];
 const CC = { 'Học tập': 'var(--k-study)', 'Bài tập': 'var(--k-study)', 'Dự án': 'var(--k-proj)', 'Cá nhân': 'var(--k-pers)', 'Sức khỏe': 'var(--k-pers)' };
@@ -303,21 +306,30 @@ function GoalForm({ item, onSave, onClose }) {
 }
 
 // ---------- Onboarding ----------
-function Onboarding({ onDone, onBack }) {
-  const [f, setF] = useState({ name: '', budget: '', income: '' }), [more, setMore] = useState(false), [gs, setGs] = useState([{ title: '', target: '', unit: 'đ' }]);
+function Onboarding({ onDone, onBack, initialName = '', initialBudget = '', initialIncome = '', initialGoals = null }) {
+  const [f, setF] = useState({
+    name: initialName || '',
+    budget: initialBudget || '',
+    income: initialIncome || '',
+  });
+  const [gs, setGs] = useState(
+    initialGoals && initialGoals.length
+      ? initialGoals.map(g => ({ title: g.title || '', target: g.target || '', unit: g.unit || 'đ' }))
+      : [{ title: '', target: '', unit: 'đ' }]
+  );
   const set = (k, v) => setF({ ...f, [k]: v }), setG = (i, k, v) => setGs(gs.map((g, j) => j === i ? { ...g, [k]: v } : g));
-  return (<div className="onb"><div className="card onbc">
-    <div className="logo"><LogoIcon s={34} /> Cà Phê</div><h2>Chào mừng bạn!</h2><p className="mut">Chỉ cần một cái tên là bắt đầu được rồi.</p>
-    <Field l="Tên của bạn"><input value={f.name} onChange={e => set('name', e.target.value)} autoFocus /></Field>
-    <button className="btn sm out" style={{ alignSelf: 'flex-start' }} onClick={() => setMore(!more)}>{more ? 'Ẩn bớt ▴' : 'Thêm ngân sách & mục tiêu (không bắt buộc) ▾'}</button>
-    {more && <><Field l="Ngân sách chi tiêu dự tính / tháng (đ)"><MoneyInput value={f.budget} onChange={v => set('budget', v)} placeholder="VD: 3.000.000" /></Field>
-      <Field l="Thu nhập dự tính / tháng (đ)"><MoneyInput value={f.income} onChange={v => set('income', v)} placeholder="VD: 4.000.000" /></Field>
-      <div className="col gap"><span className="s mut">Mục tiêu của bạn (thêm bao nhiêu tuỳ ý)</span>
-        {gs.map((g, i) => <div key={i} className="gbox"><div className="row gap"><input value={g.title} onChange={e => setG(i, 'title', e.target.value)} placeholder="VD: Mua laptop" />{gs.length > 1 && <button className="ib" onClick={() => setGs(gs.filter((_, j) => j !== i))}>✕</button>}</div>
-          <div className="grid2"><MoneyInput value={g.target} onChange={v => setG(i, 'target', v)} placeholder="Cần đạt" /><input value={g.unit} onChange={e => setG(i, 'unit', e.target.value)} placeholder="Đơn vị (đ, cuốn...)" /></div></div>)}
-        <button className="btn sm out" onClick={() => setGs([...gs, { title: '', target: '', unit: 'đ' }])}>+ Thêm mục tiêu</button></div></>}
-    <button className="btn" disabled={!f.name.trim()} onClick={() => onDone({ ...f, goals: gs })}>Bắt đầu →</button>
-    {onBack && <button className="btn out" onClick={onBack}>← Quay lại đăng nhập</button>}</div></div>);
+  return (<div className="onb"><div className="card onbc" style={{ maxWidth: 500 }}>
+    <div className="logo"><LogoIcon s={34} /> Cà Phê</div><h2>Thiết lập tài khoản</h2><p className="mut">Nhập tên của bạn, ngân sách chi tiêu và các mục tiêu để bắt đầu quản lý thời gian & chi tiêu.</p>
+    <Field l="Tên của bạn"><input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Nhập tên của bạn" autoFocus /></Field>
+    <Field l="Ngân sách chi tiêu dự tính / tháng (đ)"><MoneyInput value={f.budget} onChange={v => set('budget', v)} placeholder="VD: 3.000.000" /></Field>
+    <Field l="Thu nhập dự tính / tháng (đ)"><MoneyInput value={f.income} onChange={v => set('income', v)} placeholder="VD: 5.000.000" /></Field>
+    <div className="col gap" style={{ marginTop: 2 }}>
+      <div className="row between"><span className="s mut" style={{ fontWeight: 600 }}>🎯 Mục tiêu (tiết kiệm, mua sắm...)</span><small className="mut">(không bắt buộc)</small></div>
+      {gs.map((g, i) => <div key={i} className="gbox"><div className="row gap"><input value={g.title} onChange={e => setG(i, 'title', e.target.value)} placeholder="VD: Mua laptop" />{gs.length > 1 && <button type="button" className="ib" onClick={() => setGs(gs.filter((_, j) => j !== i))} title="Xóa mục tiêu">✕</button>}</div>
+        <div className="grid2"><MoneyInput value={g.target} onChange={v => setG(i, 'target', v)} placeholder="Cần đạt" /><input value={g.unit} onChange={e => setG(i, 'unit', e.target.value)} placeholder="Đơn vị (đ, cuốn...)" /></div></div>)}
+      <button type="button" className="btn sm out" style={{ alignSelf: 'flex-start' }} onClick={() => setGs([...gs, { title: '', target: '', unit: 'đ' }])}>+ Thêm mục tiêu</button></div>
+    <button className="btn" disabled={!f.name.trim()} onClick={() => onDone({ ...f, goals: gs })} style={{ marginTop: 6 }}>Hoàn tất & Bắt đầu →</button>
+    {onBack && <button type="button" className="btn out" onClick={onBack}>← Đăng xuất</button>}</div></div>);
 }
 
 // ---------- 4) Các trang ----------
@@ -660,7 +672,7 @@ function Summary({ db, rg }) {
     <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></div>);
 }
 
-function ProfileModal({ p, counts, db, cloudUser, theme, toggleTheme, onClose, onSave, onLogout, onDelete, onReset, flash, onCloudLinked }) {
+function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onDelete, onReset, flash, onCloudLinked }) {
   const [v, setV] = useState('menu'); // 'menu' | 'info' | 'link_email' | 'change_email' | 'del_confirm'
   const [f, setF] = useState(p);
   const [sure2, setSure2] = useState(false);
@@ -803,7 +815,6 @@ function ProfileModal({ p, counts, db, cloudUser, theme, toggleTheme, onClose, o
           </div>
 
           <button className="btn out" onClick={() => setV('info')}>👤 Sửa thông tin cá nhân & Ngân sách</button>
-          <button className="btn out" onClick={toggleTheme}>{theme === 'dark' ? '☀️ Chuyển sang giao diện sáng' : '🌙 Chuyển sang giao diện tối'}</button>
           <button className="btn out" onClick={onLogout}>🚪 Đăng xuất</button>
           <button className="btn out dng" onClick={() => setV('del_confirm')}>🗑 Xóa tài khoản này</button>
         </>
@@ -909,7 +920,7 @@ function GroupsModal({ groups, onClose, onAdd, onRemove }) {
 
 // ---------- 5) App gốc ----------
 const NAV = [['today', '🏠', 'Trang chính'], ['cal', '📅', 'Lịch'], ['fin', '💰', 'Tài chính'], ['goal', '🎯', 'Mục tiêu']];
-function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLinked }) {
+function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
   const [db, setDb] = useState(() => loadDb(id)), [page, setPage] = useState('today'), [modal, setModal] = useState(null), [clip, setClip] = useState(null), [toast, setToast] = useState(null), tt = useRef(null);
   const [cloudUser, setCloudUser] = useState(null);
   const [homeDate, setHomeDate] = useState(today());
@@ -1125,16 +1136,10 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
   return (<div className="app">
     <aside className="side"><div className="logo"><LogoIcon s={34} /> Cà Phê</div><small className="mut">Quản lý cuộc sống sinh viên</small>
       <nav>{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav>
-      <div style={{ marginTop: 'auto', paddingTop: 16 }}>
-        <button className="btn sm out" style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={toggleTheme} title="Đổi giao diện">
-          <span>{theme === 'dark' ? '☀️' : '🌙'}</span><span>{theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}</span>
-        </button>
-      </div>
     </aside>
     <main>
       <div className="top">
         <div className="logo mobl"><LogoIcon s={26} /> Cà Phê</div>
-        <button className="theme" onClick={toggleTheme} aria-label="Đổi giao diện">{theme === 'dark' ? '☀️' : '🌙'}</button>
       </div>
       <div key={page}>{page === 'today' && <Today {...P} />}{page === 'cal' && <Calendar {...P} />}{page === 'fin' && <Finance {...P} />}{page === 'goal' && <Goals {...P} />}</div>
     </main>
@@ -1149,8 +1154,6 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
         counts={`${db.tasks.length} việc · ${db.txs.length} giao dịch · ${db.goals.length} mục tiêu`}
         db={db}
         cloudUser={cloudUser}
-        theme={theme}
-        toggleTheme={toggleTheme}
         onClose={() => setModal(null)}
         onSave={p => {
           setDb(d => ({ ...d, profile: p }));
@@ -1177,8 +1180,8 @@ function App({ id, theme, toggleTheme, onLogout, onRename, onDelete, onCloudLink
 }
 // Gốc: quản lý tài khoản (đăng nhập lại / tạo mới) và giao diện sáng-tối
 export default function Root() {
-  const [m, setM] = useState(loadMeta), [creating, setCreating] = useState(false);
-  useEffect(() => { wr(META, m); document.documentElement.dataset.theme = m.theme; }, [m]);
+  const [m, setM] = useState(loadMeta), [onboarding, setOnboarding] = useState(null);
+  useEffect(() => { wr(META, { ...m, theme: 'dark' }); document.documentElement.dataset.theme = 'dark'; }, [m]);
 
   const delAccount = async (accId, deleteCloud = false) => {
     if (deleteCloud) await authService.deleteOwnAccount();
@@ -1205,60 +1208,109 @@ export default function Root() {
   };
 
   const handleCloudLogin = (user, cloudData) => {
-    const accountName = user.user_metadata?.full_name || cloudData?.profile?.name || user.email.split('@')[0];
-    const existing = m.accounts.find(a => a.id === user.id);
-
-    // Kiểm tra xem trên máy này có dữ liệu local trước đó không (ví dụ tài khoản người dùng đang dùng thử)
+    const accountName = user.user_metadata?.full_name || cloudData?.profile?.name || user.email?.split('@')[0] || 'Người dùng';
+    const localDb = rd(ACC(user.id));
     const activeAcc = m.accounts.find(a => a.id === m.active) || m.accounts[0];
     const prevDb = activeAcc ? rd(ACC(activeAcc.id)) : null;
-    const hasLocalData = prevDb && (prevDb.tasks?.length || prevDb.txs?.length || prevDb.goals?.length);
 
-    if (existing) {
-      if (cloudData && (cloudData.tasks?.length || cloudData.txs?.length || cloudData.goals?.length)) {
-        wr(ACC(user.id), upgrade(cloudData));
-      } else if (hasLocalData) {
-        // Tài khoản cloud chưa có dữ liệu nhưng máy có dữ liệu -> đẩy lên cloud
-        syncService.uploadAll(user.id, prevDb).catch(console.error);
-        wr(ACC(user.id), upgrade(prevDb));
-      }
-      setM({ ...m, active: user.id });
-    } else {
-      let initialData;
-      // 1. Nếu trên Cloud đã có dữ liệu sẵn -> dùng dữ liệu Cloud
-      if (cloudData && (cloudData.tasks?.length || cloudData.txs?.length || cloudData.goals?.length)) {
-        initialData = cloudData;
-      } else if (hasLocalData) {
-        // 2. Nếu tài khoản Cloud mới tinh nhưng trên máy đang có việc/chi tiêu cũ -> tự động mang toàn bộ lên Cloud!
-        initialData = {
-          ...prevDb,
-          profile: {
-            ...prevDb.profile,
-            name: accountName || prevDb.profile?.name || 'Người dùng',
-          }
-        };
-        // Tự động đẩy toàn bộ dữ liệu này lên Supabase ngay trong nền
-        syncService.uploadAll(user.id, initialData).catch(console.error);
-      } else {
-        initialData = { ...seed(), profile: { name: accountName, budget: 3000000, income: 0 } };
-      }
-
-      wr(ACC(user.id), upgrade(initialData));
-      setM({ ...m, accounts: [...m.accounts, { id: user.id, name: accountName }], active: user.id });
+    let baseDb = seed();
+    if (cloudData && (cloudData.tasks?.length || cloudData.txs?.length || cloudData.goals?.length || cloudData.profile)) {
+      baseDb = cloudData;
+    } else if (localDb && (localDb.tasks?.length || localDb.txs?.length || localDb.goals?.length || localDb.profile)) {
+      baseDb = localDb;
+    } else if (prevDb && (prevDb.tasks?.length || prevDb.txs?.length || prevDb.goals?.length)) {
+      baseDb = prevDb;
     }
+
+    setOnboarding({
+      user,
+      baseDb,
+      initialName: accountName,
+      initialBudget: baseDb.profile?.budget || '',
+      initialIncome: baseDb.profile?.income || '',
+      initialGoals: baseDb.goals && baseDb.goals.length ? baseDb.goals : [{ title: '', target: '', unit: 'đ' }],
+    });
   };
 
-  const create = f => {
-    const id = uid(), b = seed(), gl = f.goals.filter(g => g.title.trim() && +g.target > 0).map(g => ({ id: uid(), title: g.title.trim(), current: 0, target: +g.target, unit: g.unit.trim() || 'đ' }));
-    gl.forEach(g => { if (g.unit === 'đ') g.auto = true; });
-    const d = { ...b, goals: gl };
-    wr(ACC(id), { ...d, profile: { name: f.name.trim(), budget: +f.budget || 0, income: +f.income || 0 } });
-    setM({ ...m, accounts: [...m.accounts, { id, name: f.name.trim() }], active: id }); setCreating(false);
+  const completeOnboarding = f => {
+    if (!onboarding) return;
+    const { user, baseDb } = onboarding;
+    const gl = (f.goals || [])
+      .filter(g => g.title && g.title.trim() && +g.target > 0)
+      .map(g => ({
+        id: g.id || uid(),
+        title: g.title.trim(),
+        current: g.current || 0,
+        target: +g.target,
+        unit: g.unit.trim() || 'đ',
+        auto: g.unit.trim() === 'đ' ? (g.auto !== undefined ? g.auto : true) : false,
+      }));
+
+    const finalDb = upgrade({
+      ...baseDb,
+      profile: {
+        ...(baseDb.profile || {}),
+        name: f.name.trim(),
+        budget: +f.budget || 0,
+        income: +f.income || 0,
+        hasOnboarded: true,
+      },
+      goals: gl,
+    });
+
+    wr(ACC(user.id), finalDb);
+    syncService.uploadAll(user.id, finalDb).catch(console.error);
+
+    setM(x => {
+      const filtered = x.accounts.filter(a => a.id !== user.id);
+      return {
+        ...x,
+        active: user.id,
+        accounts: [...filtered, { id: user.id, name: f.name.trim() }],
+      };
+    });
+
+    setOnboarding(null);
   };
-  if (m.active) return <App key={m.active} id={m.active} theme={m.theme} toggleTheme={() => setM(x => ({ ...x, theme: x.theme === 'dark' ? 'light' : 'dark' }))}
-    onLogout={() => { authService.signOut().catch(() => {}); setM({ ...m, active: null }); }} onRename={name => setM(x => ({ ...x, accounts: x.accounts.map(a => a.id === x.active ? { ...a, name } : a) }))}
-    onDelete={deleteCloud => delAccount(m.active, deleteCloud)} onCloudLinked={handleCloudLinked} />;
-  if (creating) return <Onboarding onDone={create} onBack={() => setCreating(false)} />;
-  return <AuthScreen accounts={m.accounts} onPick={id => setM({ ...m, active: id })} onNew={() => setCreating(true)} onDelAccount={delAccount} onCloudLogin={handleCloudLogin}
-    theme={m.theme} toggleTheme={() => setM(x => ({ ...x, theme: x.theme === 'dark' ? 'light' : 'dark' }))} />;
+
+  const cancelOnboarding = () => {
+    authService.signOut().catch(() => {});
+    setOnboarding(null);
+  };
+
+  if (onboarding) {
+    return (
+      <Onboarding
+        initialName={onboarding.initialName}
+        initialBudget={onboarding.initialBudget}
+        initialIncome={onboarding.initialIncome}
+        initialGoals={onboarding.initialGoals}
+        onDone={completeOnboarding}
+        onBack={cancelOnboarding}
+      />
+    );
+  }
+
+  if (m.active) {
+    return (
+      <App
+        key={m.active}
+        id={m.active}
+        onLogout={() => { authService.signOut().catch(() => {}); setM({ ...m, active: null }); }}
+        onRename={name => setM(x => ({ ...x, accounts: x.accounts.map(a => a.id === x.active ? { ...a, name } : a) }))}
+        onDelete={deleteCloud => delAccount(m.active, deleteCloud)}
+        onCloudLinked={handleCloudLinked}
+      />
+    );
+  }
+
+  return (
+    <AuthScreen
+      accounts={m.accounts}
+      onPick={id => setM({ ...m, active: id })}
+      onDelAccount={delAccount}
+      onCloudLogin={handleCloudLogin}
+    />
+  );
 }
 

@@ -6,5 +6,6 @@ dist/
 !.env.example
 .DS_Store
 .codex/
+.agents/
 preview-ui.html
 xem-thu-dang-nhap.html

@@ -123,7 +123,6 @@ export function AuthScreen({ accounts = [], onPick, onNew, onDelAccount, onCloud
   return (
     <div className={'au-wrap' + (out ? ' au-out' : '')}>
       <div className="au-bg"><i /><i /></div>
-      <button className="au-theme" onClick={toggleTheme} aria-label="Đổi giao diện sáng/tối">{theme === 'dark' ? '☀️' : '🌙'}</button>
       <div className="au-card">
         <form className="au-form" onSubmit={submit} autoComplete="off">
           <div className="au-h" key={tab} style={{ '--i': 0 }}>
@@ -155,32 +154,35 @@ export function AuthScreen({ accounts = [], onPick, onNew, onDelAccount, onCloud
           <div className="au-row" style={{ '--i': 3 }}>{login ? <button type="button" className="au-link" onClick={forgot}>Quên mật khẩu?</button> : <span />}</div>
           {msg && <div className={'au-msg ' + msg.t} key={msg.s} role="status">{msg.s}</div>}
           <button className="au-go" disabled={loading} style={{ '--i': 4 }}>{loading ? <span className="au-spin" /> : <>{login ? 'Đăng nhập' : 'Tạo tài khoản'} <b>→</b></>}</button>
-          <div className="au-or" style={{ '--i': 5 }}>hoặc dùng trên máy này</div>
-          <div className="au-accs" style={{ '--i': 6 }}>
-            {accounts.map(a => (
-              <div key={a.id} className="au-chip-box">
-                <button type="button" className="au-chip" onClick={() => onPick(a.id)}>
-                  <span className="ava">{(a.name[0] || '?').toUpperCase()}</span>
-                  {a.name}
-                </button>
-                {onDelAccount && (
-                  <button
-                    type="button"
-                    className="au-chip-del"
-                    onClick={e => {
-                      e.stopPropagation();
-                      setConfirmDel(a);
-                    }}
-                    title={`Xóa tài khoản ${a.name}`}
-                    aria-label={`Xóa tài khoản ${a.name}`}
-                  >
-                    ✕
-                  </button>
-                )}
+          {accounts.length > 0 && (
+            <>
+              <div className="au-or" style={{ '--i': 5 }}>hoặc chọn tài khoản trên máy này</div>
+              <div className="au-accs" style={{ '--i': 6 }}>
+                {accounts.map(a => (
+                  <div key={a.id} className="au-chip-box">
+                    <button type="button" className="au-chip" onClick={() => onPick(a.id)}>
+                      <span className="ava">{(a.name[0] || '?').toUpperCase()}</span>
+                      <span>{a.name}</span>
+                    </button>
+                    {onDelAccount && (
+                      <button
+                        type="button"
+                        className="au-chip-del"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setConfirmDel(a);
+                        }}
+                        title={`Xóa tài khoản ${a.name}`}
+                        aria-label={`Xóa tài khoản ${a.name}`}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-            <button type="button" className="au-chip try" onClick={onNew}>+ Dùng thử, không cần tài khoản</button>
-          </div>
+            </>
+          )}
         </form>
         <Scene />
       </div>
