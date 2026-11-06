@@ -12,6 +12,9 @@ const I = {
   off: <path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 4M6.5 6.6A17 17 0 0 0 2 12s4 7 10 7c1.8 0 3.4-.6 4.8-1.4M9.9 9.9a3 3 0 0 0 4.2 4.2" />,
 };
 const Ic = ({ n, c = 'ic' }) => <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{I[n]}</svg>;
+const ThemeIcon = ({ theme }) => theme === 'dark'
+  ? <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></svg>
+  : <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.7 6.7 0 0 0 21 12.8Z" /></svg>;
 
 const Logo = ({ s = 30 }) => (<svg viewBox="0 0 48 48" width={s} height={s} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
   <path d="M10 20h24v10a10 10 0 0 1-10 10h-4a10 10 0 0 1-10-10z" fill="currentColor" fillOpacity=".2" /><path d="M34 22h3a5 5 0 0 1 0 10h-4" />
@@ -123,11 +126,14 @@ export function AuthScreen({ accounts = [], onPick, onNew, onDelAccount, onCloud
   return (
     <div className={'au-wrap' + (out ? ' au-out' : '')}>
       <div className="au-bg"><i /><i /></div>
+      <button className="au-theme" type="button" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'} title={theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}>
+        <ThemeIcon theme={theme} />
+      </button>
       <div className="au-card">
         <form className="au-form" onSubmit={submit} autoComplete="off">
           <div className="au-h" key={tab} style={{ '--i': 0 }}>
             <h1>{login ? 'Chào mừng trở lại!' : 'Tạo tài khoản mới'}</h1>
-            <p>{login ? 'Đăng nhập để đồng bộ lịch, thu chi và mục tiêu trên mọi thiết bị.' : 'Chỉ mất một phút, dữ liệu của bạn được lưu an toàn trên đám mây.'}</p>
+            <p>{login ? 'Đăng nhập để đồng bộ lịch, thu chi và các quỹ trên mọi thiết bị.' : 'Chỉ mất một phút, dữ liệu của bạn được lưu an toàn trên đám mây.'}</p>
           </div>
           <div className="au-seg" style={{ '--i': 1, '--t': login ? 0 : 1 }} role="tablist"><i />
             <button type="button" className={login ? 'on' : ''} onClick={() => swap('login')}>Đăng nhập</button>
@@ -195,7 +201,7 @@ export function AuthScreen({ accounts = [], onPick, onNew, onDelAccount, onCloud
               <h3>Xác nhận xóa tài khoản?</h3>
             </div>
             <p style={{ color: 'var(--mut)', fontSize: '.9rem', margin: '12px 0 16px', lineHeight: 1.5 }}>
-              Bạn có chắc chắn muốn xóa tài khoản <strong>"{confirmDel.name}"</strong> khỏi máy này không? Toàn bộ việc cần làm, chi tiêu và mục tiêu đã lưu trên máy sẽ bị xóa vĩnh viễn.
+              Bạn có chắc chắn muốn xóa tài khoản <strong>"{confirmDel.name}"</strong> khỏi máy này không? Toàn bộ việc cần làm, giao dịch và quỹ đã lưu trên máy sẽ bị xóa vĩnh viễn.
             </p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button type="button" className="btn sm out" onClick={() => setConfirmDel(null)}>Hủy bỏ (Giữ lại)</button>

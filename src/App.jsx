@@ -96,6 +96,20 @@ const TargetIcon = ({ s = 22, color = 'var(--acc)' }) => (
     <circle cx="12" cy="12" r="2" fill={color} />
   </svg>
 );
+const ThemeIcon = ({ theme }) => theme === 'dark' ? (
+  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+  </svg>
+) : (
+  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3 6.7 6.7 0 0 0 21 12.8Z" />
+  </svg>
+);
+const ThemeToggle = ({ theme, onToggle }) => (
+  <button className="theme" onClick={onToggle} aria-label={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'} title={theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}>
+    <ThemeIcon theme={theme} /><span className="theme-label">{theme === 'dark' ? 'Sáng' : 'Tối'}</span>
+  </button>
+);
 // Thu/chi "hiệu lực": không gắn việc (tính ngay) hoặc gắn với việc ĐÃ hoàn thành. Khoản gắn việc chưa xong thì chờ.
 const isEff = (db, x) => { const t = x.taskId && db.tasks.find(k => k.id === x.taskId); return !t || t.status === 'done'; };
 const PRIW = { 'Cao': 3, 'Trung bình': 2, 'Thấp': 1 }, goalPri = g => PRIW[g.pri] ? g.pri : 'Trung bình';
@@ -898,7 +912,7 @@ function GroupsModal({ groups, onClose, onAdd, onRemove }) {
 
 // ---------- 5) App gốc ----------
 const NAV = [['today', '🏠', 'Trang chính'], ['cal', '📅', 'Lịch'], ['fin', '💰', 'Tài chính'], ['goal', '🎯', 'Quỹ']];
-function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
+function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleTheme }) {
   const [db, setDb] = useState(() => loadDb(id)), [page, setPage] = useState('today'), [modal, setModal] = useState(null), [clip, setClip] = useState(null), [toast, setToast] = useState(null), tt = useRef(null);
   const [cloudUser, setCloudUser] = useState(null);
   const [homeDate, setHomeDate] = useState(today());
@@ -1068,10 +1082,12 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
   return (<div className="app">
     <aside className="side"><div className="logo"><LogoIcon s={34} /> Cà Phê</div><small className="mut">Quản lý cuộc sống sinh viên</small>
       <nav>{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav>
+      <ThemeToggle theme={theme} onToggle={toggleTheme} />
     </aside>
     <main>
       <div className="top">
         <div className="logo mobl"><LogoIcon s={26} /> Cà Phê</div>
+        <ThemeToggle theme={theme} onToggle={toggleTheme} />
       </div>
       <div key={page}>{page === 'today' && <Today {...P} />}{page === 'cal' && <Calendar {...P} />}{page === 'fin' && <Finance {...P} />}{page === 'goal' && <Funds db={db} openFund={openFund} transferFund={(fund, direction) => openTransfer(fund, direction)} deleteFund={deleteFund} adjustBalance={openBalance} />}</div>
     </main>
@@ -1131,7 +1147,9 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
 // Gốc: quản lý tài khoản (đăng nhập lại / tạo mới) và giao diện sáng-tối
 export default function Root() {
   const [m, setM] = useState(loadMeta), [onboarding, setOnboarding] = useState(null);
-  useEffect(() => { wr(META, { ...m, theme: 'dark' }); document.documentElement.dataset.theme = 'dark'; }, [m]);
+  const theme = m.theme || 'dark';
+  useEffect(() => { wr(META, { ...m, theme }); document.documentElement.dataset.theme = theme; }, [m, theme]);
+  const toggleTheme = () => setM(x => ({ ...x, theme: (x.theme || 'dark') === 'dark' ? 'light' : 'dark' }));
 
   const delAccount = async (accId, deleteCloud = false) => {
     if (deleteCloud) await authService.deleteOwnAccount();
@@ -1246,6 +1264,8 @@ export default function Root() {
         onRename={name => setM(x => ({ ...x, accounts: x.accounts.map(a => a.id === x.active ? { ...a, name } : a) }))}
         onDelete={deleteCloud => delAccount(m.active, deleteCloud)}
         onCloudLinked={handleCloudLinked}
+        theme={theme}
+        toggleTheme={toggleTheme}
       />
     );
   }
@@ -1256,6 +1276,8 @@ export default function Root() {
       onPick={id => setM({ ...m, active: id })}
       onDelAccount={delAccount}
       onCloudLogin={handleCloudLogin}
+      theme={theme}
+      toggleTheme={toggleTheme}
     />
   );
 }
