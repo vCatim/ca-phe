@@ -150,6 +150,19 @@ input,select,textarea{background:var(--bg);border:1px solid var(--line);border-r
 .goal-foot{margin-top:auto;padding-top:4px}
 .goal-bump-btn{width:100%;min-height:40px;display:flex;align-items:center;justify-content:center}
 
+/* Nền banner lời chào: ảnh quán cà phê được làm tối theo chiều đọc để nội dung luôn rõ. */
+:root,[data-theme=dark]{--welcome-overlay:linear-gradient(96deg,rgba(20,12,8,.92) 0%,rgba(42,24,12,.79) 52%,rgba(42,24,12,.50) 100%)}
+[data-theme=light]{--welcome-overlay:linear-gradient(96deg,rgba(34,19,10,.86) 0%,rgba(65,36,17,.68) 52%,rgba(65,36,17,.39) 100%)}
+.banner{min-height:166px;background-image:var(--welcome-overlay),var(--welcome-bg);background-color:#422716;background-size:cover;background-position:center 52%;color:#fff;text-shadow:0 1px 12px rgba(12,7,3,.45);isolation:isolate}
+.banner::after{right:0;top:0;width:42%;height:100%;border-radius:0;background:linear-gradient(90deg,transparent,rgba(255,194,104,.10));z-index:0}
+.banner::before{background:linear-gradient(110deg,transparent 35%,rgba(255,235,193,.20) 50%,transparent 65%);z-index:1}
+.banner:hover,.banner:active{color:#fff;filter:none}
+.bn-alt{display:none}
+.banner>small,.banner>h1,.banner>p{z-index:2}
+.chip{background:rgba(34,19,10,.68);border-color:rgba(255,238,208,.38);box-shadow:0 6px 18px rgba(12,7,3,.16);text-shadow:none}
+.banner:hover .chip{background:rgba(34,19,10,.88);border-color:rgba(255,238,208,.60);color:#fff}
+@media(max-width:900px){.banner{min-height:174px;padding:22px 20px;background-position:center}.banner p{max-width:calc(100% - 8px);padding-right:4px}.chip{top:12px;right:12px}}
+
 /* ===== Trang chính: gọn hơn + chuyển cảnh nhẹ ===== */
 .st{animation:up .5s cubic-bezier(.16,1,.3,1) backwards;animation-delay:calc(var(--n,0)*60ms)} /* hiện lần lượt từ trên xuống */
 .dnav{display:flex;align-items:center;gap:8px}

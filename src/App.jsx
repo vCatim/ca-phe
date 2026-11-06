@@ -33,6 +33,12 @@ const PAL = ['#e0a24a', '#5b8def', '#6fae7c', '#a07be0', '#e58e5d', '#d9658b', '
 const GRP0 = [['Ăn uống', .3], ['Đi lại', .08], ['Học tập', .15], ['Dự án', .1], ['Giải trí', .12], ['Mua sắm', .1], ['Sức khỏe', .05], ['Cá nhân', .05], ['Khác', .05]];
 const defaultGroups = () => GRP0.map(([name, share], i) => ({ name, share, color: PAL[i % PAL.length] }));
 const QUOTES = ['Mỗi ngày một bước nhỏ, cuối tháng thành quãng đường dài.', 'Một tách cà phê, một kế hoạch rõ ràng — thế là đủ để bắt đầu.', 'Kỷ luật hôm nay là tự do của ngày mai.', 'Code một dòng, tiết kiệm một đồng, tiến gần mục tiêu hơn một chút.', 'Đừng chờ đủ động lực — hãy bắt đầu, động lực sẽ tới.', 'Tiến bộ 1% mỗi ngày, một năm sau bạn sẽ ngạc nhiên.'];
+const WELCOME_BACKGROUNDS = [
+  '/welcome-backgrounds/cafe-cherry.png',
+  '/welcome-backgrounds/cafe-rain.png',
+  '/welcome-backgrounds/cafe-terrace.png',
+  '/welcome-backgrounds/cafe-warm.png',
+];
 
 // ---------- 2) Dữ liệu mẫu + localStorage ----------
 const K = 'caphe-v2';
@@ -327,7 +333,7 @@ function Today({ db, openTx, openTask, openList, openProfile, toggle, delTask, c
   const done = tasks.filter(x => x.status === 'done').length;
   const dn = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 864e5);
   return (<div className="page stg">
-    <div className="banner st" style={{ '--n': 0 }} onClick={openProfile}><div className="bn-alt" aria-hidden="true" />
+    <div className="banner st" style={{ '--n': 0, '--welcome-bg': `url(${WELCOME_BACKGROUNDS[dn % WELCOME_BACKGROUNDS.length]})` }} onClick={openProfile}>
       <small>{new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</small>
       <Hop name={p.name} /><p>“{QUOTES[dn % QUOTES.length]}”</p><span className="chip">👤 Tài khoản <i>›</i></span></div>
 
