@@ -36,12 +36,20 @@ const QUOTES = ['Mỗi ngày một bước nhỏ, cuối tháng thành quãng đ
 
 // ---------- 2) Dữ liệu mẫu + localStorage ----------
 const K = 'caphe-v2';
-const seed = () => ({ profile: null, groups: defaultGroups(), tasks: [], txs: [], goals: [] }); // tài khoản mới bắt đầu trống, người dùng tự thêm
+const seed = () => ({ profile: null, groups: defaultGroups(), tasks: [], txs: [], goals: [] }); // `goals` được giữ làm tên dữ liệu cũ, giao diện gọi là quỹ
 // Nhiều tài khoản (giả lập, không có máy chủ): META giữ danh sách + tài khoản đang đăng nhập, mỗi tài khoản có một khóa dữ liệu riêng
 const META = 'caphe-meta', ACC = id => 'caphe-acc-' + id;
 const rd = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
 const wr = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
-const upgrade = d => ({ ...d, groups: d.groups || defaultGroups() });
+const upgrade = d => {
+  const txs = d.txs || [];
+  const funds = (d.goals || []).map(g => {
+    const oldAlloc = txs.reduce((sum, x) => sum + ((x.alloc && x.alloc[g.id]) || 0), 0);
+    const balance = Math.max(0, Number(g.balance ?? (Number(g.current || 0) + oldAlloc)) || 0);
+    return { ...g, balance, current: balance, target: balance, unit: 'đ', auto: false };
+  });
+  return { ...d, profile: d.profile ? { ...d.profile, cashBase: Number(d.profile.cashBase) || 0 } : d.profile, groups: d.groups || defaultGroups(), txs, goals: funds };
+};
 const legacy = () => { // dữ liệu bản cũ (v2/v1) → trở thành tài khoản đầu tiên
   const c = rd('caphe-v2'); if (c && c.profile) return c;
   const v = rd('caphe-v1');
@@ -69,33 +77,11 @@ const TargetIcon = ({ s = 22, color = 'var(--acc)' }) => (
 // Thu/chi "hiệu lực": không gắn việc (tính ngay) hoặc gắn với việc ĐÃ hoàn thành. Khoản gắn việc chưa xong thì chờ.
 const isEff = (db, x) => { const t = x.taskId && db.tasks.find(k => k.id === x.taskId); return !t || t.status === 'done'; };
 const PRIW = { 'Cao': 3, 'Trung bình': 2, 'Thấp': 1 }, goalPri = g => PRIW[g.pri] ? g.pri : 'Trung bình';
-// Mỗi khoản thu/chi hiệu lực lưu `alloc` = {mụcTiêuId: số tiền đã cộng(+)/trừ(−)}. Tiền hiện có của mục tiêu = gốc + tổng alloc (nên xóa/sửa giao dịch là tự cập nhật)
-const allocSum = (db, gid) => db.txs.reduce((a, x) => a + ((x.alloc && x.alloc[gid]) || 0), 0);
-const goalNow = (db, g) => Math.max(0, g.current + allocSum(db, g.id));
-// Chia một khoản thu (+) / chi (−) cho các mục tiêu tiền đang bật tự động, theo ưu tiên (Cao 3 : Trung bình 2 : Thấp 1); thu chỉ chia cho mục tiêu chưa đạt
-const splitAlloc = (db, amount) => {
-  let gs = db.goals.filter(g => g.auto && g.unit === 'đ');
-  if (!gs.length || !amount) return null;
-  if (amount > 0) { const open = gs.filter(g => goalNow(db, g) < g.target); if (open.length) gs = open; }
-  gs = [...gs].sort((a, b) => PRIW[goalPri(b)] - PRIW[goalPri(a)]);
-  const W = gs.reduce((a, g) => a + PRIW[goalPri(g)], 0), out = {}; let used = 0;
-  gs.slice(1).forEach(g => { out[g.id] = Math.round(amount * PRIW[goalPri(g)] / W); used += out[g.id]; });
-  out[gs[0].id] = amount - used; // phần dư về mục tiêu ưu tiên cao nhất
-  return out;
-};
-// Việc hoàn thành / bỏ hoàn thành → cộng/trừ các thu/chi gắn với việc đó vào mục tiêu
-const retarget = (db, taskId, done) => {
-  let txs = db.txs;
-  db.txs.filter(x => x.taskId === taskId).forEach(x => {
-    if (x.autoGoal === false) return;
-    const amount = x.type === 'income' ? x.amount : -x.amount;
-    const alloc = done
-      ? (x.goalId ? { [x.goalId]: amount } : splitAlloc({ ...db, txs: txs.filter(y => y.id !== x.id) }, amount))
-      : null;
-    txs = txs.map(y => { if (y.id !== x.id) return y; const { alloc: _a, ...r } = y; return alloc ? { ...r, alloc } : { ...r, alloc: null }; });
-  });
-  return txs;
-};
+const effectiveNet = db => db.txs.filter(x => isEff(db, x)).reduce((sum, x) => sum + (x.type === 'income' ? x.amount : -x.amount), 0);
+const fundBalance = fund => Math.max(0, Number(fund.balance ?? fund.current) || 0);
+const totalFundBalance = db => db.goals.reduce((sum, fund) => sum + fundBalance(fund), 0);
+const totalAssets = db => (Number(db.profile?.cashBase) || 0) + effectiveNet(db);
+const availableBalance = db => totalAssets(db) - totalFundBalance(db);
 const CHIPS = { expense: [['Cà phê', 'Ăn uống'], ['Ăn trưa', 'Ăn uống'], ['Xăng', 'Đi lại'], ['Gửi xe', 'Đi lại'], ['Mua sách', 'Học tập'], ['Xem phim', 'Giải trí']], income: [['Làm thêm', 'Khác'], ['Freelance', 'Dự án'], ['Học bổng', 'Học tập'], ['Gia đình', 'Khác']] };
 // Giao dịch gắn với việc (taskId); nếu việc đã bị xóa thì dùng bản ghi nhớ tk/grp
 const tInfo = (tasks, x) => { const t = tasks.find(t => t.id === x.taskId); return t ? { title: t.title, grp: t.cat } : { title: x.tk || 'Không gắn việc', grp: x.grp || 'Khác' }; };
@@ -212,12 +198,11 @@ function TaskForm({ item, onSave, onClose, onDel }) {
     {item.id && <button className="btn out dng" onClick={() => onDel(item.id)}>🗑 Xóa việc này</button>}</Modal>);
 }
 function TxForm({ item, onSave, onClose }) {
-  const [f, setF] = useState({ autoGoal: true, goalId: '', ...item }), [nw, setNw] = useState(''), isNew = f.grp === '__new', set = (k, v) => setF({ ...f, [k]: v });
+  const [f, setF] = useState(item), [nw, setNw] = useState(''), isNew = f.grp === '__new', set = (k, v) => setF({ ...f, [k]: v });
   const opts = item.allTasks.filter(t => t.date === f.date).sort((a, b) => a.start.localeCompare(b.start));
   const pick = id => { const k = item.allTasks.find(x => x.id === id), g = k && (k.cat === 'Bài tập' ? 'Học tập' : k.cat); setF({ ...f, taskId: id, grp: g && item.groups.includes(g) ? g : f.grp }); };
   const gname = isNew ? (item.groups.find(x => x.toLowerCase() === nw.trim().toLowerCase()) || nw.trim()) : f.grp;
   const chip = ([n, g]) => setF({ ...f, note: n, grp: item.groups.includes(g) ? g : f.grp });
-  const hasGoals = item.goals && item.goals.length > 0;
   return (<Modal title={item.id ? 'Sửa giao dịch' : 'Thêm giao dịch'} onClose={onClose}>
     <div className="seg">{['expense', 'income'].map(t => <button key={t} className={f.type === t ? 'on' : ''} onClick={() => set('type', t)}>{t === 'income' ? 'Thu nhập' : 'Chi tiêu'}</button>)}</div>
     <Field l="Số tiền (đ)"><MoneyInput value={f.amount} onChange={v => set('amount', v)} placeholder="0" autoFocus /></Field>
@@ -226,42 +211,10 @@ function TxForm({ item, onSave, onClose }) {
     <div className="chips2">{CHIPS[f.type].map(c => <button key={c[0]} className="chip2" onClick={() => chip(c)}>{c[0]}</button>)}</div>
     <Field l="Nhóm"><select value={f.grp} onChange={e => set('grp', e.target.value)}>{item.groups.map(g => <option key={g}>{g}</option>)}<option value="__new">＋ Tạo nhóm mới…</option></select></Field>
     {isNew && <Field l="Tên nhóm mới"><input value={nw} onChange={e => setNw(e.target.value)} placeholder="VD: Du lịch" autoFocus /></Field>}
-    <div className="card" style={{ padding: '10px 12px', background: 'var(--card2)', borderRadius: 14 }}>
-      <label className="row gap s" style={{ cursor: 'pointer', userSelect: 'none' }}>
-        <input
-          type="checkbox"
-          style={{ width: 'auto', accentColor: 'var(--acc)' }}
-          checked={f.autoGoal !== false}
-          onChange={e => set('autoGoal', e.target.checked)}
-        />
-        <b>🎯 Tự động cập nhật vào mục tiêu</b>
-      </label>
-      {f.autoGoal !== false && hasGoals && (
-        <div style={{ marginTop: 8 }}>
-          <select
-            value={f.goalId || ''}
-            onChange={e => set('goalId', e.target.value)}
-            style={{ fontSize: '.85rem', padding: '6px 10px' }}
-          >
-            <option value="">Tất cả mục tiêu tiền (theo mức ưu tiên)</option>
-            {item.goals.map(g => (
-              <option key={g.id} value={g.id}>
-                {g.title} ({money(g.now)} / {money(g.target)})
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-      {f.autoGoal !== false && !hasGoals && (
-        <p className="mut s" style={{ marginTop: 4 }}>
-          Khoản này sẽ tự động cập nhật khi bạn tạo mục tiêu tiền (đ).
-        </p>
-      )}
-    </div>
     {opts.length > 0 && <Field l="Việc liên quan (tuỳ chọn)"><select value={f.taskId} onChange={e => pick(e.target.value)}><option value="">Không gắn việc</option>{opts.map(t => <option key={t.id} value={t.id}>{t.start} · {t.title}</option>)}</select></Field>}
-    {opts.length > 0 && <p className="mut s">Gắn với việc: khoản này chỉ được tính (và cập nhật mục tiêu) khi việc hoàn thành. Không gắn việc: tính ngay.</p>}
+    {opts.length > 0 && <p className="mut s">Gắn với việc: khoản này chỉ được tính khi việc hoàn thành. Không gắn việc: tính ngay.</p>}
     {item.id ? <Field l="Ngày"><input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value, taskId: '' })} /></Field> : f.date !== today() && <p className="mut s">Ghi cho ngày {f.date.split('-').reverse().join('/')}</p>}
-    <button className="btn" disabled={!(+f.amount > 0) || !gname} onClick={() => { const { allTasks, groups, goals, ...r } = f, k = allTasks.find(x => x.id === f.taskId); onSave({ ...r, id: f.id || uid(), amount: +f.amount, tk: k ? k.title : '', grp: gname, autoGoal: f.autoGoal !== false, goalId: f.autoGoal !== false ? f.goalId || '' : '' }); }}>Lưu</button></Modal>);
+    <button className="btn" disabled={!(+f.amount > 0) || !gname} onClick={() => { const { allTasks, groups, ...r } = f, k = allTasks.find(x => x.id === f.taskId); onSave({ ...r, id: f.id || uid(), amount: +f.amount, tk: k ? k.title : '', grp: gname }); }}>Lưu</button></Modal>);
 }
 function TxList({ db, type, date, onClose, onAdd, onEdit, onDel }) {
   const d = date || today(), isT = d === today();
@@ -272,63 +225,50 @@ function TxList({ db, type, date, onClose, onAdd, onEdit, onDel }) {
     {pend && <p className="mut s">Khoản gắn với việc chưa hoàn thành chưa được tính vào tổng.</p>}
     <div className="row between"><b>Tổng (đã tính)</b><b>{money(tot)}</b></div><button className="btn" onClick={onAdd}>+ {inc ? 'Thu nhập' : 'Chi tiêu'}</button></Modal>);
 }
-function GoalForm({ item, onSave, onClose }) {
-  const [f, setF] = useState(item); const set = (k, v) => setF({ ...f, [k]: v }), isMoney = f.unit.trim() === 'đ';
-  const bad = !f.title.trim() || !(+f.target > 0);
-
-  const handleSave = () => {
-    const { asum, ...r } = f;
-    const isEdit = !!item.id;
-    const currentEdited = isEdit && (+f.current !== item.current);
-    // Nếu người dùng chủ động sửa số tiền "Hiện có", lấy chính xác giá trị đó. Nếu không sửa, giữ nguyên gốc.
-    const finalCurrent = currentEdited || !isEdit
-      ? Math.max(0, +f.current || 0)
-      : Math.max(0, (+f.current || 0) - (asum || 0));
-
-    onSave({
-      ...r,
-      id: f.id || uid(),
-      target: +f.target,
-      pri: f.pri || 'Trung bình',
-      auto: isMoney && !!f.auto,
-      current: finalCurrent
-    }, currentEdited);
-  };
-
-  return (<Modal title={item.id ? 'Sửa mục tiêu' : 'Mục tiêu mới'} onClose={onClose}>
-    <Field l="Tên mục tiêu"><input value={f.title} onChange={e => set('title', e.target.value)} autoFocus /></Field>
-    <div className="grid2"><Field l="Hiện có"><MoneyInput value={f.current} onChange={v => set('current', v)} /></Field>
-      <Field l="Mục tiêu"><MoneyInput value={f.target} onChange={v => set('target', v)} /></Field></div>
-    <Field l="Đơn vị (đ, cuốn, buổi...)"><input value={f.unit} onChange={e => set('unit', e.target.value)} /></Field>
-    <Field l="Mức ưu tiên"><select value={f.pri || 'Trung bình'} onChange={e => set('pri', e.target.value)}>{PRI.map(c => <option key={c}>{c}</option>)}</select></Field>
-    {isMoney && <label className="row gap s"><input type="checkbox" style={{ width: 'auto' }} checked={!!f.auto} onChange={e => set('auto', e.target.checked)} /> Tự động cập nhật theo thu/chi</label>}
-    <button className="btn" disabled={bad} onClick={handleSave}>Lưu</button></Modal>);
+function FundForm({ item, onSave, onClose }) {
+  const [title, setTitle] = useState(item.title || '');
+  return (<Modal title={item.id ? 'Đổi tên quỹ' : 'Tạo quỹ mới'} onClose={onClose}>
+    <Field l="Tên quỹ"><input value={title} onChange={e => setTitle(e.target.value)} placeholder="VD: Du lịch" autoFocus /></Field>
+    <p className="mut s">Bạn có thể nạp tiền vào quỹ ngay sau khi tạo.</p>
+    <button className="btn" disabled={!title.trim()} onClick={() => onSave({ ...item, id: item.id || uid(), title: title.trim(), balance: fundBalance(item), current: fundBalance(item), target: fundBalance(item), unit: 'đ', auto: false })}>Lưu</button>
+  </Modal>);
+}
+function FundTransferForm({ fund, direction, available, onSave, onClose }) {
+  const [amount, setAmount] = useState('');
+  const isDeposit = direction === 'deposit', max = isDeposit ? available : fundBalance(fund), value = +amount || 0;
+  return (<Modal title={isDeposit ? `Nạp vào ${fund.title}` : `Rút từ ${fund.title}`} onClose={onClose}>
+    <p className="mut s">{isDeposit ? `Có thể nạp tối đa ${money(Math.max(0, available))}.` : `Số dư quỹ: ${money(fundBalance(fund))}.`}</p>
+    <Field l="Số tiền (đ)"><MoneyInput value={amount} onChange={setAmount} placeholder="0" autoFocus /></Field>
+    {value > max && <p className="err">Số tiền vượt quá số dư có thể dùng.</p>}
+    <button className="btn" disabled={!(value > 0) || value > max} onClick={() => onSave(value)}>Xác nhận</button>
+  </Modal>);
+}
+function BalanceForm({ current, onSave, onClose }) {
+  const [amount, setAmount] = useState(Math.max(0, current));
+  return (<Modal title="Điều chỉnh số dư hiện có" onClose={onClose}>
+    <Field l="Số dư hiện có (đ)"><MoneyInput value={amount} onChange={setAmount} placeholder="0" autoFocus /></Field>
+    <p className="mut s">Số tiền này không bao gồm các khoản đã phân bổ vào quỹ.</p>
+    <button className="btn" disabled={amount === '' || amount == null} onClick={() => onSave(+amount || 0)}>Lưu số dư</button>
+  </Modal>);
 }
 
 // ---------- Onboarding ----------
-function Onboarding({ onDone, onBack, initialName = '', initialBudget = '', initialIncome = '', initialGoals = null }) {
+function Onboarding({ onDone, onBack, initialName = '', initialBudget = '', initialIncome = '', initialCash = '' }) {
   const [f, setF] = useState({
     name: initialName || '',
     budget: initialBudget || '',
     income: initialIncome || '',
+    cashBase: initialCash || '',
   });
-  const [gs, setGs] = useState(
-    initialGoals && initialGoals.length
-      ? initialGoals.map(g => ({ title: g.title || '', target: g.target || '', unit: g.unit || 'đ' }))
-      : [{ title: '', target: '', unit: 'đ' }]
-  );
-  const set = (k, v) => setF({ ...f, [k]: v }), setG = (i, k, v) => setGs(gs.map((g, j) => j === i ? { ...g, [k]: v } : g));
+  const set = (k, v) => setF({ ...f, [k]: v });
   return (<div className="onb"><div className="card onbc" style={{ maxWidth: 500 }}>
-    <div className="logo"><LogoIcon s={34} /> Cà Phê</div><h2>Thiết lập tài khoản</h2><p className="mut">Nhập tên của bạn, ngân sách chi tiêu và các mục tiêu để bắt đầu quản lý thời gian & chi tiêu.</p>
+    <div className="logo"><LogoIcon s={34} /> Cà Phê</div><h2>Thiết lập tài khoản</h2><p className="mut">Nhập thông tin để bắt đầu quản lý thời gian, chi tiêu và các quỹ của bạn.</p>
     <Field l="Tên của bạn"><input value={f.name} onChange={e => set('name', e.target.value)} placeholder="Nhập tên của bạn" autoFocus /></Field>
     <Field l="Ngân sách chi tiêu dự tính / tháng (đ)"><MoneyInput value={f.budget} onChange={v => set('budget', v)} placeholder="VD: 3.000.000" /></Field>
     <Field l="Thu nhập dự tính / tháng (đ)"><MoneyInput value={f.income} onChange={v => set('income', v)} placeholder="VD: 5.000.000" /></Field>
-    <div className="col gap" style={{ marginTop: 2 }}>
-      <div className="row between"><span className="s mut" style={{ fontWeight: 600 }}>🎯 Mục tiêu (tiết kiệm, mua sắm...)</span><small className="mut">(không bắt buộc)</small></div>
-      {gs.map((g, i) => <div key={i} className="gbox"><div className="row gap"><input value={g.title} onChange={e => setG(i, 'title', e.target.value)} placeholder="VD: Mua laptop" />{gs.length > 1 && <button type="button" className="ib" onClick={() => setGs(gs.filter((_, j) => j !== i))} title="Xóa mục tiêu">✕</button>}</div>
-        <div className="grid2"><MoneyInput value={g.target} onChange={v => setG(i, 'target', v)} placeholder="Cần đạt" /><input value={g.unit} onChange={e => setG(i, 'unit', e.target.value)} placeholder="Đơn vị (đ, cuốn...)" /></div></div>)}
-      <button type="button" className="btn sm out" style={{ alignSelf: 'flex-start' }} onClick={() => setGs([...gs, { title: '', target: '', unit: 'đ' }])}>+ Thêm mục tiêu</button></div>
-    <button className="btn" disabled={!f.name.trim()} onClick={() => onDone({ ...f, goals: gs })} style={{ marginTop: 6 }}>Hoàn tất & Bắt đầu →</button>
+    <Field l="Số dư hiện có (đ)"><MoneyInput value={f.cashBase} onChange={v => set('cashBase', v)} placeholder="VD: 2.000.000" /></Field>
+    <p className="mut s">Bạn có thể tạo và nạp tiền vào quỹ sau khi hoàn tất.</p>
+    <button className="btn" disabled={!f.name.trim()} onClick={() => onDone(f)} style={{ marginTop: 6 }}>Hoàn tất & Bắt đầu →</button>
     {onBack && <button type="button" className="btn out" onClick={onBack}>← Đăng xuất</button>}</div></div>);
 }
 
@@ -618,35 +558,29 @@ function Finance({ db, openTx, delTx, openGroups }) {
     <div className="col gap">{shown.length ? shown.map(row) : <div className="card empty"><p>{all ? 'Không có giao dịch trong khoảng này.' : 'Hôm nay chưa có giao dịch.'}</p><div className="row gap"><button className="btn sm out" onClick={() => openTx('expense', dd)}>+ Chi tiêu</button><button className="btn sm" onClick={() => openTx('income', dd)}>+ Thu nhập</button></div></div>}</div></div>);
 }
 
-function Goals({ db, openGoal, delGoal, bump, toggleAuto, cyclePri }) {
-  const fmt = (g, v) => g.unit === 'đ' ? money(v) : `${v}`, list = [...db.goals].sort((a, b) => PRIW[goalPri(b)] - PRIW[goalPri(a)]), nAuto = db.goals.filter(g => g.auto && g.unit === 'đ').length;
-  return (<div className="page"><div className="row between"><h2>Mục tiêu</h2><button className="btn sm" onClick={() => openGoal({})}>+ Mục tiêu mới</button></div>
-    {nAuto > 1 && <p className="mut s">Khi có nhiều mục tiêu bật tự động, thu/chi được chia theo mức ưu tiên (Cao 3 : Trung bình 2 : Thấp 1). Thu nhập chỉ chia cho mục tiêu chưa đạt.</p>}
-    <div className="cols3">{list.map(g => { const now = goalNow(db, g), pc = now / g.target * 100, isMoney = g.unit === 'đ'; return <div key={g.id} className="card goal">
-      <div className="goal-top">
-        <div className="goal-title-wrap">
-          <TargetIcon s={22} color="var(--acc)" />
-          <b className="goal-title-text">{g.title}</b>
-        </div>
-        <div className="goal-actions">
-          <button className="ib" onClick={() => openGoal(g)} title="Sửa">✎</button>
-          <button className="ib" onClick={() => delGoal(g.id)} title="Xóa">🗑</button>
-        </div>
+function Funds({ db, openFund, transferFund, deleteFund, adjustBalance }) {
+  const allocated = totalFundBalance(db), assets = totalAssets(db), available = availableBalance(db);
+  return (<div className="page">
+    <div className="row between"><h2>Quỹ</h2><button className="btn sm" onClick={() => openFund({})}>+ Tạo quỹ</button></div>
+    <div className="card sum">
+      <small>Tổng tài sản</small><h1>{money(assets)}</h1>
+      <div className="three">
+        <div><small>Số dư hiện có</small><b>{money(available)}</b><button className="btn sm out" style={{ marginTop: 8 }} onClick={adjustBalance}>Điều chỉnh</button></div>
+        <div><small>Đã phân bổ vào quỹ</small><b>{money(allocated)}</b></div>
+        <div><small>Số quỹ</small><b>{db.goals.length}</b></div>
       </div>
-      <div className="goal-num-row">
-        <h2>{fmt(g, now)} <span className="mut s">/ {fmt(g, g.target)}{g.unit !== 'đ' ? ' ' + g.unit : ''}</span></h2>
+    </div>
+    <p className="mut s">Nạp và rút tiền chỉ chuyển tiền giữa số dư hiện có và các quỹ, nên tổng tài sản không đổi.</p>
+    <div className="cols3">{db.goals.map(fund => <div key={fund.id} className="card goal">
+      <div className="goal-top"><div className="goal-title-wrap"><TargetIcon s={22} color="var(--acc)" /><b className="goal-title-text">{fund.title}</b></div>
+        <div className="goal-actions"><button className="ib" onClick={() => openFund(fund)} title="Đổi tên">✎</button><button className="ib" onClick={() => deleteFund(fund)} title="Xóa quỹ">🗑</button></div>
       </div>
-      <Bar pct={pc} color={pc >= 100 ? 'var(--ok)' : undefined} />
-      <div className="row between s goal-meta-row">
-        <span className="mut">{Math.round(pc)}% hoàn thành</span>
-        <button className={'pri p' + PRIW[goalPri(g)]} onClick={() => cyclePri(g)} title="Bấm để đổi mức ưu tiên">Ưu tiên: {goalPri(g)}</button>
-      </div>
-      <div className="goal-foot">
-        {isMoney ? <button className={'sw' + (g.auto ? ' on' : '')} onClick={() => toggleAuto(g)}><i /><span>Tự động cập nhật</span></button>
-          : <button className="btn sm out goal-bump-btn" onClick={() => bump(g)}>+ 1 {g.unit}</button>}
-      </div>
-    </div>; })}</div>
-    {!db.goals.length && <div className="card empty"><TargetIcon s={48} color="var(--mut)" /><p>Chưa có mục tiêu nào.</p><button className="btn sm" onClick={() => openGoal({})}>+ Đặt mục tiêu đầu tiên</button></div>}</div>);
+      <div className="goal-num-row"><h2>{money(fundBalance(fund))}</h2></div>
+      <small className="goal-meta-row">Số tiền đang dành riêng</small>
+      <div className="row gap goal-foot"><button className="btn sm grow" onClick={() => transferFund(fund, 'deposit')}>Nạp</button><button className="btn sm out grow" onClick={() => transferFund(fund, 'withdraw')}>Rút</button></div>
+    </div>)}</div>
+    {!db.goals.length && <div className="card empty"><TargetIcon s={48} color="var(--mut)" /><p>Chưa có quỹ nào.</p><button className="btn sm" onClick={() => openFund({})}>+ Tạo quỹ đầu tiên</button></div>}
+  </div>);
 }
 
 // Tổng kết tuần này / tháng này (độc lập với bộ lọc phía trên)
@@ -691,7 +625,7 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
     try {
       const uploaded = await syncService.uploadAll(cloudUser.id, db);
       if (!uploaded) throw new Error('Upload failed');
-      flash(`🎉 Đã sao lưu toàn bộ ${db.tasks.length} việc, ${db.txs.length} chi tiêu và ${db.goals.length} mục tiêu lên email!`);
+      flash(`🎉 Đã sao lưu toàn bộ ${db.tasks.length} việc, ${db.txs.length} giao dịch và ${db.goals.length} quỹ lên email!`);
     } catch (e) {
       flash('❌ Không thể đồng bộ, hãy kiểm tra kết nối mạng.');
     } finally {
@@ -834,7 +768,7 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
                   <span className="tag" style={{ background: 'color-mix(in srgb,var(--warn) 18%,transparent)', color: 'var(--warn)' }}>Chưa có email</span>
                 </div>
                 <p className="mut s" style={{ margin: 0 }}>
-                  Dữ liệu hiện chỉ lưu trên trình duyệt này. Hãy kết nối email để chuyển toàn bộ <b>{db.tasks.length} việc</b>, <b>{db.txs.length} chi tiêu</b> và <b>{db.goals.length} mục tiêu</b> lên đám mây, không lo mất khi đổi máy.
+                  Dữ liệu hiện chỉ lưu trên trình duyệt này. Hãy kết nối email để chuyển toàn bộ <b>{db.tasks.length} việc</b>, <b>{db.txs.length} giao dịch</b> và <b>{db.goals.length} quỹ</b> lên đám mây, không lo mất khi đổi máy.
                 </p>
                 <button
                   className="btn sm"
@@ -856,7 +790,7 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
       {v === 'link_email' && (
         <div className="col gap">
           <p className="mut s" style={{ margin: 0, lineHeight: 1.5 }}>
-            Nhập email và mật khẩu. Toàn bộ <b>{db.tasks.length} việc</b>, <b>{db.txs.length} chi tiêu</b> và <b>{db.goals.length} mục tiêu</b> hiện có trên máy này sẽ được tải thẳng lên email của bạn!
+            Nhập email và mật khẩu. Toàn bộ <b>{db.tasks.length} việc</b>, <b>{db.txs.length} giao dịch</b> và <b>{db.goals.length} quỹ</b> hiện có trên máy này sẽ được tải thẳng lên email của bạn!
           </p>
           <Field l="Địa chỉ Email">
             <input type="email" value={linkEmail} onChange={e => setLinkEmail(e.target.value)} placeholder="VD: yourname@gmail.com" autoFocus />
@@ -898,7 +832,7 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
             Bạn có chắc chắn muốn xóa tài khoản <strong>"{p.name}"</strong> không?
           </p>
           <div style={{ background: 'color-mix(in srgb,var(--warn) 12%,transparent)', border: '1px solid var(--warn)', borderRadius: 12, padding: 12, fontSize: '.84rem', color: 'var(--warn)', textAlign: 'left', lineHeight: 1.5 }}>
-            Toàn bộ việc cần làm, lịch trình, các khoản chi tiêu và mục tiêu sẽ bị <strong>xóa vĩnh viễn</strong> và không thể khôi phục.{cloudUser ? ' Tài khoản Email này cũng sẽ bị xóa khỏi Supabase.' : ' Tài khoản này chỉ được lưu trên máy.'}
+            Toàn bộ việc cần làm, lịch trình, các giao dịch và quỹ sẽ bị <strong>xóa vĩnh viễn</strong> và không thể khôi phục.{cloudUser ? ' Tài khoản Email này cũng sẽ bị xóa khỏi Supabase.' : ' Tài khoản này chỉ được lưu trên máy.'}
           </div>
           <div className="row gap" style={{ marginTop: 10, justifyContent: 'center' }}>
             <button className="btn out" onClick={() => setV('menu')}>Hủy bỏ (Giữ lại)</button>
@@ -934,7 +868,7 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
           <button className="btn" disabled={!f.name.trim()} onClick={() => onSave({ name: f.name.trim(), budget: +f.budget || 0, income: +f.income || 0 })}>Lưu thay đổi</button>
           <button className="btn out" onClick={() => setV('menu')}>← Quay lại</button>
           <button className="btn out dng" onClick={() => sure2 ? onReset() : setSure2(true)}>
-            {sure2 ? 'Bấm lần nữa để xóa hết việc, giao dịch, mục tiêu' : '🧹 Xóa toàn bộ việc, giao dịch, mục tiêu'}
+            {sure2 ? 'Bấm lần nữa để xóa hết việc, giao dịch, quỹ' : '🧹 Xóa toàn bộ việc, giao dịch, quỹ'}
           </button>
         </>
       )}
@@ -952,7 +886,7 @@ function GroupsModal({ groups, onClose, onAdd, onRemove }) {
 }
 
 // ---------- 5) App gốc ----------
-const NAV = [['today', '🏠', 'Trang chính'], ['cal', '📅', 'Lịch'], ['fin', '💰', 'Tài chính'], ['goal', '🎯', 'Mục tiêu']];
+const NAV = [['today', '🏠', 'Trang chính'], ['cal', '📅', 'Lịch'], ['fin', '💰', 'Tài chính'], ['goal', '🎯', 'Quỹ']];
 function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
   const [db, setDb] = useState(() => loadDb(id)), [page, setPage] = useState('today'), [modal, setModal] = useState(null), [clip, setClip] = useState(null), [toast, setToast] = useState(null), tt = useRef(null);
   const [cloudUser, setCloudUser] = useState(null);
@@ -994,7 +928,6 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
   const openTask = it => setModal({ k: 'task', it: it.id ? { ...it, txs: db.txs.filter(x => x.taskId === it.id) } : { title: '', date: today(), start: '09:00', end: '10:00', cat: 'Học tập', pri: 'Trung bình', note: '', status: 'todo', ...it, txs: [] } });
   const openTx = (type, it) => {
     const gl = db.groups.map(g => g.name);
-    const moneyGoals = db.goals.filter(g => g.unit === 'đ').map(g => ({ ...g, now: goalNow(db, g) }));
     setModal({
       k: 'tx',
       it: {
@@ -1003,17 +936,16 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
         date: today(),
         note: '',
         taskId: '',
-        autoGoal: it && it.autoGoal !== undefined ? it.autoGoal : true,
-        goalId: '',
         ...it,
         grp: gl.includes(it?.grp) ? it.grp : 'Khác',
         allTasks: db.tasks,
-        groups: gl,
-        goals: moneyGoals
+        groups: gl
       }
     });
   };
-  const openGoal = it => setModal({ k: 'goal', it: it.id ? { ...it, current: goalNow(db, it), asum: allocSum(db, it.id) } : { title: '', current: 0, target: '', unit: 'đ', pri: 'Trung bình', auto: true, asum: 0 } });
+  const openFund = it => setModal({ k: 'fund', it });
+  const openTransfer = (fund, direction) => setModal({ k: 'transfer', fund, direction });
+  const openBalance = () => setModal({ k: 'balance' });
   const openList = (type, date) => setModal({ k: 'list', type, date: date || today() });
   const openProfile = () => setModal({ k: 'profile' });
   const openGroups = () => setModal({ k: 'groups' });
@@ -1034,47 +966,15 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
     }
     return { added: newTasks.length, skipped: imported.length - newTasks.length };
   };
-  const saveGoal = (g, currentEdited) => {
-    setDb(d => {
-      let txs = d.txs;
-      // Nếu người dùng chủ động sửa số tiền "Hiện có", xóa các phân bổ alloc cũ vào mục tiêu này
-      // để số tiền hiện có hiển thị chính xác con số người dùng vừa nhập
-      if (currentEdited && g.id) {
-        txs = txs.map(x => {
-          if (!x.alloc || !(g.id in x.alloc)) return x;
-          const { [g.id]: _del, ...restAlloc } = x.alloc;
-          return { ...x, alloc: Object.keys(restAlloc).length ? restAlloc : null };
-        });
-      }
-      const goals = d.goals.some(x => x.id === g.id)
-        ? d.goals.map(x => x.id === g.id ? g : x)
-        : [...d.goals, g];
-      return { ...d, goals, txs };
-    });
-    if (cloudUser) {
-      syncService.upsertGoal(cloudUser.id, g);
-      if (currentEdited && g.id) {
-        db.txs.filter(x => x.alloc && (g.id in x.alloc)).forEach(x => {
-          const { [g.id]: _del, ...restAlloc } = x.alloc;
-          syncService.upsertTx(cloudUser.id, { ...x, alloc: Object.keys(restAlloc).length ? restAlloc : null });
-        });
-      }
-    }
-    flash(`Đã lưu mục tiêu: "${g.title}"`);
+  const saveFund = fund => {
+    setDb(d => ({ ...d, goals: d.goals.some(x => x.id === fund.id) ? d.goals.map(x => x.id === fund.id ? fund : x) : [...d.goals, fund] }));
+    if (cloudUser) syncService.upsertGoal(cloudUser.id, fund);
+    flash(`Đã lưu quỹ: "${fund.title}"`);
     setModal(null);
   };
-  const saveTx = t => { // khoản hiệu lực (không gắn việc / việc đã xong) được chia ngay vào mục tiêu tự động; khoản chờ thì chưa
-    const old = db.txs.find(x => x.id === t.id), signed = x => x.type === 'income' ? x.amount : -x.amount, task = t.taskId && db.tasks.find(k => k.id === t.taskId);
-    const eff = !task || task.status === 'done', { alloc: _o, ...base } = t;
-    let alloc = null;
-    if (eff && t.autoGoal !== false) {
-      if (t.goalId) {
-        alloc = { [t.goalId]: signed(t) };
-      } else {
-        alloc = splitAlloc({ ...db, txs: db.txs.filter(x => x.id !== t.id) }, signed(t));
-      }
-    }
-    const nt = alloc ? { ...base, alloc } : { ...base, alloc: null };
+  const saveTx = t => {
+    const old = db.txs.find(x => x.id === t.id);
+    const { alloc: _alloc, autoGoal: _autoGoal, goalId: _goalId, ...nt } = t;
     setDb(d => {
       const groups = d.groups.some(g => g.name === t.grp) ? d.groups : [...d.groups, { name: t.grp, share: .1, color: PAL[d.groups.length % PAL.length] }];
       return { ...d, groups, txs: old ? d.txs.map(x => x.id === t.id ? nt : x) : [...d.txs, nt] };
@@ -1083,20 +983,15 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
     flash(`Đã lưu ${t.type === 'income' ? 'thu nhập' : 'chi tiêu'}: ${money(t.amount)}`);
     setModal(null);
   };
-  const saveTask = t => { // lưu việc; nếu đổi trạng thái hoàn thành thì cập nhật mục tiêu
+  const saveTask = t => {
     const { txs: _tx, ...clean } = t;
     if (clean.date > today() && clean.status === 'done') {
       clean.status = 'todo';
       flash('⚠️ Chưa đến ngày nên chưa thể hoàn thành việc này');
     }
     setDb(d => {
-      const old = d.tasks.find(x => x.id === clean.id), nd = { ...d, tasks: old ? d.tasks.map(x => x.id === clean.id ? clean : x) : [...d.tasks, clean] }, was = !!old && old.status === 'done', now = clean.status === 'done';
-      if (was === now) return nd;
-      const updatedTxs = retarget(nd, clean.id, now);
-      if (cloudUser) {
-        updatedTxs.filter(x => x.taskId === clean.id).forEach(x => syncService.upsertTx(cloudUser.id, x));
-      }
-      return { ...nd, txs: updatedTxs };
+      const old = d.tasks.find(x => x.id === clean.id);
+      return { ...d, tasks: old ? d.tasks.map(x => x.id === clean.id ? clean : x) : [...d.tasks, clean] };
     });
     if (cloudUser) syncService.upsertTask(cloudUser.id, clean);
     flash(`Đã lưu: "${clean.title}"`);
@@ -1104,40 +999,34 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
   };
   const delTask = id => {
     const t = db.tasks.find(x => x.id === id); if (!t) return;
-    setDb(d => {
-      const nd = { ...d, tasks: d.tasks.filter(x => x.id !== id) };
-      if (t.status === 'done') return nd;
-      const updatedTxs = retarget(nd, id, true);
-      if (cloudUser) {
-        updatedTxs.filter(x => x.taskId === id).forEach(x => syncService.upsertTx(cloudUser.id, x));
-      }
-      return { ...nd, txs: updatedTxs };
-    });
+    setDb(d => ({ ...d, tasks: d.tasks.filter(x => x.id !== id) }));
     if (cloudUser) syncService.deleteTask(cloudUser.id, id);
     flash('Đã xóa', () => {
-      setDb(d => {
-        const nd = { ...d, tasks: [...d.tasks, t] };
-        if (t.status === 'done') return nd;
-        const updatedTxs = retarget(nd, id, false);
-        if (cloudUser) {
-          updatedTxs.filter(x => x.taskId === id).forEach(x => syncService.upsertTx(cloudUser.id, x));
-        }
-        return { ...nd, txs: updatedTxs };
-      });
+      setDb(d => ({ ...d, tasks: [...d.tasks, t] }));
       if (cloudUser) syncService.upsertTask(cloudUser.id, t);
       setToast(null);
     });
   };
-  const toggleAuto = g => {
-    const updated = { ...g, auto: !g.auto };
-    setDb(d => ({ ...d, goals: d.goals.map(x => x.id === g.id ? updated : x) }));
+  const transferFund = (fund, direction, amount) => {
+    const delta = direction === 'deposit' ? amount : -amount;
+    const updated = { ...fund, balance: fundBalance(fund) + delta, current: fundBalance(fund) + delta, target: fundBalance(fund) + delta, unit: 'đ', auto: false };
+    setDb(d => ({ ...d, goals: d.goals.map(x => x.id === fund.id ? updated : x) }));
     if (cloudUser) syncService.upsertGoal(cloudUser.id, updated);
+    flash(`${direction === 'deposit' ? 'Đã nạp vào' : 'Đã rút từ'} quỹ ${money(amount)}`);
+    setModal(null);
   };
-  const cyclePri = g => {
-    const nextPri = { 'Thấp': 'Trung bình', 'Trung bình': 'Cao', 'Cao': 'Thấp' }[goalPri(g)];
-    const updated = { ...g, pri: nextPri };
-    setDb(d => ({ ...d, goals: d.goals.map(x => x.id === g.id ? updated : x) }));
-    if (cloudUser) syncService.upsertGoal(cloudUser.id, updated);
+  const deleteFund = fund => {
+    if (!window.confirm(`Xóa quỹ "${fund.title}"? ${money(fundBalance(fund))} sẽ trở về số dư hiện có.`)) return;
+    del('goals', fund.id);
+  };
+  const adjustBalance = amount => {
+    setDb(d => {
+      const profile = { ...d.profile, cashBase: amount - effectiveNet(d) + totalFundBalance(d) };
+      if (cloudUser) syncService.saveProfile(cloudUser.id, profile);
+      return { ...d, profile };
+    });
+    flash('Đã cập nhật số dư hiện có');
+    setModal(null);
   };
   const pasteClip = target => { // dán việc đã sao chép: tuần → vào tuần bắt đầu `target`; ngày → vào ngày `target`. Bỏ qua việc trùng, trạng thái về "Chưa làm"
     if (!clip) return 0;
@@ -1160,12 +1049,11 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
     const remaining = curTasks.filter(x => x.id !== t.id && x.status !== 'done').length;
     if (done && remaining === 0 && curTasks.length > 0) {
       flash(t.date === today() ? '🎉 Hoàn thành hết việc hôm nay! Tự thưởng một ly cà phê nhé ☕✨' : `🎉 Hoàn thành hết việc ngày ${t.date.split('-').reverse().join('/')}!`);
-    } else if (net && db.goals.some(g => g.auto && g.unit === 'đ')) {
-      flash(`Mục tiêu: ${(done ? net : -net) > 0 ? '+' : '−'}${money(Math.abs(net))}`);
+    } else if (net) {
+      flash(`Số dư hiện có: ${(done ? net : -net) > 0 ? '+' : '−'}${money(Math.abs(net))}`);
     }
   };
-  const bump = g => upsert('goals', { ...g, current: g.current + 1 });
-  const P = { db, openTx, openTask, openGoal, openList, openProfile, openGroups, clip, setClip, pasteClip, toggle, delTask, toggleAuto, cyclePri, delTx: id => del('txs', id), delGoal: id => del('goals', id), bump, importIcs, curDate: homeDate, setCurDate: setHomeDate };
+  const P = { db, openTx, openTask, openFund, openTransfer, openBalance, openList, openProfile, openGroups, clip, setClip, pasteClip, toggle, delTask, transferFund, deleteFund, adjustBalance, delTx: id => del('txs', id), importIcs, curDate: homeDate, setCurDate: setHomeDate };
   return (<div className="app">
     <aside className="side"><div className="logo"><LogoIcon s={34} /> Cà Phê</div><small className="mut">Quản lý cuộc sống sinh viên</small>
       <nav>{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav>
@@ -1174,24 +1062,27 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
       <div className="top">
         <div className="logo mobl"><LogoIcon s={26} /> Cà Phê</div>
       </div>
-      <div key={page}>{page === 'today' && <Today {...P} />}{page === 'cal' && <Calendar {...P} />}{page === 'fin' && <Finance {...P} />}{page === 'goal' && <Goals {...P} />}</div>
+      <div key={page}>{page === 'today' && <Today {...P} />}{page === 'cal' && <Calendar {...P} />}{page === 'fin' && <Finance {...P} />}{page === 'goal' && <Funds db={db} openFund={openFund} transferFund={(fund, direction) => openTransfer(fund, direction)} deleteFund={deleteFund} adjustBalance={openBalance} />}</div>
     </main>
     <nav className="bot">{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav>
     {toast && <div className="toast"><span>{toast.msg}</span>{toast.undo && <button onClick={toast.undo}>Hoàn tác</button>}</div>}
     {modal?.k === 'task' && <TaskForm item={modal.it} onSave={saveTask} onClose={() => setModal(null)} onDel={id => { delTask(id); setModal(null); }} />}
     {modal?.k === 'tx' && <TxForm item={modal.it} onSave={saveTx} onClose={() => setModal(null)} />}
-    {modal?.k === 'goal' && <GoalForm item={modal.it} onSave={saveGoal} onClose={() => setModal(null)} />}
+    {modal?.k === 'fund' && <FundForm item={modal.it} onSave={saveFund} onClose={() => setModal(null)} />}
+    {modal?.k === 'transfer' && <FundTransferForm fund={modal.fund} direction={modal.direction} available={availableBalance(db)} onSave={amount => transferFund(modal.fund, modal.direction, amount)} onClose={() => setModal(null)} />}
+    {modal?.k === 'balance' && <BalanceForm current={availableBalance(db)} onSave={adjustBalance} onClose={() => setModal(null)} />}
     {modal?.k === 'profile' && (
       <ProfileModal
         p={db.profile}
-        counts={`${db.tasks.length} việc · ${db.txs.length} giao dịch · ${db.goals.length} mục tiêu`}
+        counts={`${db.tasks.length} việc · ${db.txs.length} giao dịch · ${db.goals.length} quỹ`}
         db={db}
         cloudUser={cloudUser}
         onClose={() => setModal(null)}
         onSave={p => {
-          setDb(d => ({ ...d, profile: p }));
-          if (cloudUser) syncService.saveProfile(cloudUser.id, p);
-          onRename(p.name);
+          const profile = { ...db.profile, ...p };
+          setDb(d => ({ ...d, profile: { ...d.profile, ...p } }));
+          if (cloudUser) syncService.saveProfile(cloudUser.id, profile);
+          onRename(profile.name);
           setModal(null);
         }}
         onLogout={onLogout}
@@ -1276,24 +1167,13 @@ export default function Root() {
       initialName: accountName,
       initialBudget: baseDb.profile?.budget || '',
       initialIncome: baseDb.profile?.income || '',
-      initialGoals: baseDb.goals && baseDb.goals.length ? baseDb.goals : [{ title: '', target: '', unit: 'đ' }],
+      initialCash: baseDb.profile?.cashBase || '',
     });
   };
 
   const completeOnboarding = f => {
     if (!onboarding) return;
     const { user, baseDb } = onboarding;
-    const gl = (f.goals || [])
-      .filter(g => g.title && g.title.trim() && +g.target > 0)
-      .map(g => ({
-        id: g.id || uid(),
-        title: g.title.trim(),
-        current: g.current || 0,
-        target: +g.target,
-        unit: g.unit.trim() || 'đ',
-        auto: g.unit.trim() === 'đ' ? (g.auto !== undefined ? g.auto : true) : false,
-      }));
-
     const finalDb = upgrade({
       ...baseDb,
       profile: {
@@ -1301,9 +1181,10 @@ export default function Root() {
         name: f.name.trim(),
         budget: +f.budget || 0,
         income: +f.income || 0,
+        cashBase: +f.cashBase || 0,
         hasOnboarded: true,
       },
-      goals: gl,
+      goals: baseDb.goals || [],
     });
 
     wr(ACC(user.id), finalDb);
@@ -1332,7 +1213,7 @@ export default function Root() {
         initialName={onboarding.initialName}
         initialBudget={onboarding.initialBudget}
         initialIncome={onboarding.initialIncome}
-        initialGoals={onboarding.initialGoals}
+        initialCash={onboarding.initialCash}
         onDone={completeOnboarding}
         onBack={cancelOnboarding}
       />

@@ -12,6 +12,9 @@ create table if not exists public.profiles (
   theme text default 'dark',
   updated_at timestamp with time zone default timezone('utc'::text, now())
 );
+-- Số dư gốc được dùng để tính tổng tài sản và số dư khả dụng trong ứng dụng.
+-- Giữ riêng với ngân sách/thời gian để nạp-rút giữa các quỹ không làm đổi tổng tiền.
+alter table public.profiles add column if not exists cash_base numeric default 0;
 
 -- 2. Bảng Nhóm ngân sách / danh mục
 create table if not exists public.groups (

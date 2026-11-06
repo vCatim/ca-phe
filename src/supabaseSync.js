@@ -30,6 +30,7 @@ export const syncService = {
             name: pRes.data.name || 'Người dùng',
             budget: Number(pRes.data.budget) || 0,
             income: Number(pRes.data.income) || 0,
+            cashBase: Number(pRes.data.cash_base) || 0,
           }
         : null;
 
@@ -56,7 +57,8 @@ export const syncService = {
         current: Number(g.current) || 0,
         unit: g.unit || 'đ',
         pri: g.pri || 'Trung bình',
-        auto: Boolean(g.auto),
+        auto: false,
+        balance: Number(g.current) || 0,
       }));
 
       const txs = (txRes.data || []).map(x => ({
@@ -92,6 +94,7 @@ export const syncService = {
           name: db.profile.name || 'Người dùng',
           budget: db.profile.budget || 0,
           income: db.profile.income || 0,
+          cash_base: db.profile.cashBase || 0,
           updated_at: new Date().toISOString(),
         });
         if (error) throw error;
@@ -147,11 +150,11 @@ export const syncService = {
           id: String(g.id),
           user_id: userId,
           title: g.title,
-          target: g.target,
-          current: g.current || 0,
+          target: g.balance ?? g.target ?? 0,
+          current: g.balance ?? g.current ?? 0,
           unit: g.unit || 'đ',
-          pri: g.pri,
-          auto: g.auto !== false,
+          pri: g.pri || 'Trung bình',
+          auto: false,
         }));
         const { error } = await supabase.from('goals').upsert(rows);
         if (error) throw error;
@@ -193,6 +196,7 @@ export const syncService = {
         name: profile.name,
         budget: profile.budget,
         income: profile.income,
+        cash_base: profile.cashBase || 0,
         updated_at: new Date().toISOString(),
       });
     } catch (e) {
@@ -319,11 +323,11 @@ export const syncService = {
         id: String(goal.id),
         user_id: userId,
         title: goal.title,
-        target: goal.target,
-        current: goal.current || 0,
+        target: goal.balance ?? goal.target ?? 0,
+        current: goal.balance ?? goal.current ?? 0,
         unit: goal.unit || 'đ',
-        pri: goal.pri,
-        auto: goal.auto !== false,
+        pri: goal.pri || 'Trung bình',
+        auto: false,
       });
     } catch (e) {
       console.error(e);
