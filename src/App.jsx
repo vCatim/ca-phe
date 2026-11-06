@@ -33,13 +33,12 @@ const PAL = ['#e0a24a', '#5b8def', '#6fae7c', '#a07be0', '#e58e5d', '#d9658b', '
 const GRP0 = [['Ăn uống', .3], ['Đi lại', .08], ['Học tập', .15], ['Dự án', .1], ['Giải trí', .12], ['Mua sắm', .1], ['Sức khỏe', .05], ['Cá nhân', .05], ['Khác', .05]];
 const defaultGroups = () => GRP0.map(([name, share], i) => ({ name, share, color: PAL[i % PAL.length] }));
 const QUOTES = ['Mỗi ngày một bước nhỏ, cuối tháng thành quãng đường dài.', 'Một tách cà phê, một kế hoạch rõ ràng — thế là đủ để bắt đầu.', 'Kỷ luật hôm nay là tự do của ngày mai.', 'Code một dòng, tiết kiệm một đồng, tiến gần mục tiêu hơn một chút.', 'Đừng chờ đủ động lực — hãy bắt đầu, động lực sẽ tới.', 'Tiến bộ 1% mỗi ngày, một năm sau bạn sẽ ngạc nhiên.'];
-const WELCOME_BACKGROUND_PATH = `${import.meta.env.BASE_URL}welcome-backgrounds/`;
 const WELCOME_BACKGROUNDS = [
-  'cafe-cherry.png',
-  'cafe-rain.png',
-  'cafe-terrace.png',
-  'cafe-warm.png',
-].map(file => `${WELCOME_BACKGROUND_PATH}${file}`);
+  '/welcome-backgrounds/cafe-cherry.png',
+  '/welcome-backgrounds/cafe-rain.png',
+  '/welcome-backgrounds/cafe-terrace.png',
+  '/welcome-backgrounds/cafe-warm.png',
+];
 
 // ---------- 2) Dữ liệu mẫu + localStorage ----------
 const K = 'caphe-v2';
