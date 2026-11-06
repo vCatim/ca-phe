@@ -42,6 +42,7 @@ React · Vite · vite-plugin-pwa · ical.js · localStorage
 - [x] Chạy trên web, đưa lên GitHub Pages
 - [x] Cài như app (PWA)
 - [x] Nhập lịch từ file `.ics`
+- [x] Kết nối và đồng bộ hai chiều trực tiếp với Google Calendar & Google Tasks
 - [x] Tài khoản và đồng bộ Supabase, chống trùng lịch
 - [x] Xóa tài khoản cloud an toàn
 - [ ] Thông báo nhắc lịch

@@ -49,6 +49,8 @@ export const syncService = {
         pri: t.pri || 'Trung bình',
         note: t.note || '',
         status: t.status || 'todo',
+        googleEventId: t.google_event_id || undefined,
+        googleTaskId: t.google_task_id || undefined,
       }));
 
       const goals = (gRes.data || []).map(g => ({
@@ -129,16 +131,18 @@ export const syncService = {
         const rows = localTasks
           .filter(t => !cloudKeys.has(taskFingerprint(t)) || (cloudTasks || []).some(x => String(x.id) === String(t.id)))
           .map(t => ({
-          id: String(t.id),
-          user_id: userId,
-          title: t.title,
-          date: t.date,
-          start_time: t.start,
-          end_time: t.end,
-          cat: t.cat,
-          pri: t.pri,
-          note: t.note || '',
-          status: t.status || 'todo',
+            id: String(t.id),
+            user_id: userId,
+            title: t.title,
+            date: t.date,
+            start_time: t.start,
+            end_time: t.end,
+            cat: t.cat,
+            pri: t.pri,
+            note: t.note || '',
+            status: t.status || 'todo',
+            google_event_id: t.googleEventId || null,
+            google_task_id: t.googleTaskId || null,
           }));
         if (rows.length) {
           const { error } = await supabase.from('tasks').upsert(rows);
@@ -283,6 +287,8 @@ export const syncService = {
         pri: task.pri,
         note: task.note || '',
         status: task.status,
+        google_event_id: task.googleEventId || null,
+        google_task_id: task.googleTaskId || null,
       });
     } catch (e) {
       console.error(e);

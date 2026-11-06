@@ -43,6 +43,9 @@ create table if not exists public.tasks (
   status text default 'todo',
   created_at timestamp with time zone default timezone('utc'::text, now())
 );
+-- Lưu ID liên kết đồng bộ hai chiều với Google Calendar và Google Tasks
+alter table public.tasks add column if not exists google_event_id text;
+alter table public.tasks add column if not exists google_task_id text;
 
 -- 4. Bảng Mục tiêu (Goals)
 create table if not exists public.goals (
