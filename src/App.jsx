@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { authService, isSupabaseConfigured } from './supabase';
 import { syncService } from './supabaseSync';
 import { AuthScreen } from './AuthScreen';
-import { dedupeTasks, mergeUniqueTasks, taskFingerprint } from './taskIdentity';
+import { dedupeTasks, goalFingerprint, mergeUniqueByFingerprint, mergeUniqueTasks, taskFingerprint, transactionFingerprint } from './taskIdentity';
 
 // ---------- 1) Tiện ích ----------
 const pad = n => String(n).padStart(2, '0');
@@ -62,6 +62,28 @@ const loadMeta = () => {
   return { accounts: [], active: null, theme: 'dark' };
 };
 const loadDb = id => upgrade(rd(ACC(id)) || seed());
+const mergeGroups = (cloudGroups = [], localGroups = []) => {
+  const names = new Set();
+  return [...cloudGroups, ...localGroups].filter(group => {
+    const key = String(group.name || '').trim().toLocaleLowerCase('vi-VN');
+    if (names.has(key)) return false;
+    names.add(key);
+    return true;
+  });
+};
+const mergeCloudData = (cloudDb, localDb) => {
+  const cloud = cloudDb || seed();
+  const local = localDb || seed();
+  return upgrade({
+    ...local,
+    profile: cloud.profile || local.profile,
+    groups: mergeGroups(cloud.groups || [], local.groups || []),
+    tasks: mergeUniqueTasks(cloud.tasks || [], local.tasks || []),
+    goals: mergeUniqueByFingerprint(cloud.goals || [], local.goals || [], goalFingerprint),
+    txs: mergeUniqueByFingerprint(cloud.txs || [], local.txs || [], transactionFingerprint),
+  });
+};
+const hasCloudSetup = db => Boolean(db?.profile?.hasOnboarded || db?.tasks?.length || db?.txs?.length || db?.goals?.length);
 
 // ---------- 3) Component nhỏ ----------
 const LogoIcon = ({ s = 30 }) => (<svg viewBox="0 0 48 48" width={s} height={s} fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
@@ -673,21 +695,10 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
       // Lấy lịch có sẵn trên cloud trước khi đẩy dữ liệu local lên. Điều này
       // tránh nhân đôi cùng một sự kiện khi người dùng liên kết lại email cũ.
       const cloud = await syncService.fetchAll(user.id);
-      const mergeById = (cloudItems = [], localItems = []) => {
-        const ids = new Set(cloudItems.map(item => String(item.id)));
-        return [...cloudItems, ...localItems.filter(item => !ids.has(String(item.id)))];
-      };
-      const mergeGroups = (cloudGroups = [], localGroups = []) => {
-        const names = new Set(cloudGroups.map(group => group.name.toLocaleLowerCase('vi-VN')));
-        return [...cloudGroups, ...localGroups.filter(group => !names.has(group.name.toLocaleLowerCase('vi-VN')))];
-      };
-      const mergedDb = {
+      const mergedDb = mergeCloudData(cloud, {
         ...db,
-        groups: mergeGroups(cloud?.groups, db.groups),
-        tasks: mergeUniqueTasks(cloud?.tasks, db.tasks),
-        goals: mergeById(cloud?.goals, db.goals),
-        txs: mergeById(cloud?.txs, db.txs),
-      };
+        profile: { ...db.profile, hasOnboarded: true },
+      });
       const uploaded = await syncService.uploadAll(user.id, mergedDb);
       if (!uploaded) throw new Error('Không thể đồng bộ dữ liệu lên email, hãy kiểm tra kết nối rồi thử lại.');
       if (onCloudLinked) onCloudLinked(user, mergedDb);
@@ -749,12 +760,12 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
                 <p className="mut s" style={{ margin: 0 }}>
                   Dữ liệu của bạn được tự động sao lưu an toàn trên đám mây Supabase.
                 </p>
-                <div className="row gap wrap" style={{ marginTop: 2 }}>
-                  <button className="btn sm" disabled={syncing} onClick={doSyncAll} style={{ flex: 1 }}>
-                    {syncing ? 'Đang tải...' : '🔄 Tải dữ liệu máy này lên Email'}
+                <div className="sync-actions" style={{ marginTop: 2 }}>
+                  <button className="btn sm out" disabled={syncing} onClick={doDownloadCloud} aria-label="Tải dữ liệu từ Email về máy">
+                    {syncing ? 'Đang tải...' : '☁️ Tải từ Email'}
                   </button>
-                  <button className="btn sm out" disabled={syncing} onClick={doDownloadCloud} style={{ flex: 1 }}>
-                    {syncing ? 'Đang tải...' : '☁️ Tải dữ liệu từ Email'}
+                  <button className="btn sm" disabled={syncing} onClick={doSyncAll} aria-label="Sao lưu dữ liệu máy này lên Email">
+                    {syncing ? 'Đang tải...' : '↥ Sao lưu lên Email'}
                   </button>
                   <button className="btn sm out" onClick={() => { setNewEmail(''); setV('change_email'); }}>
                     ✏️ Đổi email
@@ -1152,13 +1163,19 @@ export default function Root() {
     const activeAcc = m.accounts.find(a => a.id === m.active) || m.accounts[0];
     const prevDb = activeAcc ? rd(ACC(activeAcc.id)) : null;
 
-    let baseDb = seed();
-    if (cloudData && (cloudData.tasks?.length || cloudData.txs?.length || cloudData.goals?.length || cloudData.profile)) {
-      baseDb = cloudData;
-    } else if (localDb && (localDb.tasks?.length || localDb.txs?.length || localDb.goals?.length || localDb.profile)) {
-      baseDb = localDb;
-    } else if (prevDb && (prevDb.tasks?.length || prevDb.txs?.length || prevDb.goals?.length)) {
-      baseDb = prevDb;
+    const baseDb = mergeCloudData(cloudData, localDb || prevDb);
+    const needsOnboarding = !hasCloudSetup(cloudData) && !hasCloudSetup(localDb) && !hasCloudSetup(prevDb);
+
+    // Người dùng đã thiết lập xong sẽ đi thẳng vào app. Dữ liệu cloud được
+    // lấy ngay lúc đăng nhập và phần local còn thiếu cũng được gộp/sao lưu.
+    if (!needsOnboarding) {
+      wr(ACC(user.id), baseDb);
+      syncService.uploadAll(user.id, baseDb).catch(console.error);
+      setM(x => {
+        const filtered = x.accounts.filter(a => a.id !== user.id);
+        return { ...x, active: user.id, accounts: [...filtered, { id: user.id, name: accountName }] };
+      });
+      return;
     }
 
     setOnboarding({

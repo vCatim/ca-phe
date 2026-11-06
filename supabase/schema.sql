@@ -15,6 +15,9 @@ create table if not exists public.profiles (
 -- Số dư gốc được dùng để tính tổng tài sản và số dư khả dụng trong ứng dụng.
 -- Giữ riêng với ngân sách/thời gian để nạp-rút giữa các quỹ không làm đổi tổng tiền.
 alter table public.profiles add column if not exists cash_base numeric default 0;
+-- Đánh dấu người dùng đã hoàn tất thiết lập lần đầu để thiết bị mới không
+-- hiển thị lại màn hình thiết lập sau khi đã có dữ liệu trên cloud.
+alter table public.profiles add column if not exists has_onboarded boolean not null default false;
 
 -- 2. Bảng Nhóm ngân sách / danh mục
 create table if not exists public.groups (

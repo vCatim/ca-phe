@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { dedupeTasks, taskFingerprint } from './taskIdentity';
+import { dedupeTasks, goalFingerprint, mergeUniqueByFingerprint, taskFingerprint, transactionFingerprint } from './taskIdentity';
 
 export const syncService = {
   // Lấy toàn bộ dữ liệu người dùng từ Supabase
@@ -31,6 +31,7 @@ export const syncService = {
             budget: Number(pRes.data.budget) || 0,
             income: Number(pRes.data.income) || 0,
             cashBase: Number(pRes.data.cash_base) || 0,
+            hasOnboarded: Boolean(pRes.data.has_onboarded),
           }
         : null;
 
@@ -95,6 +96,7 @@ export const syncService = {
           budget: db.profile.budget || 0,
           income: db.profile.income || 0,
           cash_base: db.profile.cashBase || 0,
+          has_onboarded: Boolean(db.profile.hasOnboarded),
           updated_at: new Date().toISOString(),
         });
         if (error) throw error;
@@ -146,7 +148,13 @@ export const syncService = {
 
       // 4. Goals
       if (db.goals && db.goals.length) {
-        const rows = db.goals.map(g => ({
+        const { data: cloudGoals, error: cloudGoalsError } = await supabase
+          .from('goals').select('id, title, unit').eq('user_id', userId);
+        if (cloudGoalsError) throw cloudGoalsError;
+        const cloudGoalKeys = new Set((cloudGoals || []).map(goalFingerprint));
+        const rows = mergeUniqueByFingerprint([], db.goals, goalFingerprint)
+          .filter(g => !cloudGoalKeys.has(goalFingerprint(g)) || (cloudGoals || []).some(x => String(x.id) === String(g.id)))
+          .map(g => ({
           id: String(g.id),
           user_id: userId,
           title: g.title,
@@ -155,14 +163,20 @@ export const syncService = {
           unit: g.unit || 'đ',
           pri: g.pri || 'Trung bình',
           auto: false,
-        }));
+          }));
         const { error } = await supabase.from('goals').upsert(rows);
         if (error) throw error;
       }
 
       // 5. Transactions
       if (db.txs && db.txs.length) {
-        const rows = db.txs.map(x => ({
+        const { data: cloudTxs, error: cloudTxsError } = await supabase
+          .from('transactions').select('id, type, amount, date, note, grp').eq('user_id', userId);
+        if (cloudTxsError) throw cloudTxsError;
+        const cloudTxKeys = new Set((cloudTxs || []).map(transactionFingerprint));
+        const rows = mergeUniqueByFingerprint([], db.txs, transactionFingerprint)
+          .filter(x => !cloudTxKeys.has(transactionFingerprint(x)) || (cloudTxs || []).some(row => String(row.id) === String(x.id)))
+          .map(x => ({
           id: String(x.id),
           user_id: userId,
           type: x.type,
@@ -175,7 +189,7 @@ export const syncService = {
           grp: x.grp || 'Khác',
           tk: x.tk || '',
           alloc: x.alloc || null,
-        }));
+          }));
         const { error } = await supabase.from('transactions').upsert(rows);
         if (error) throw error;
       }
@@ -197,6 +211,7 @@ export const syncService = {
         budget: profile.budget,
         income: profile.income,
         cash_base: profile.cashBase || 0,
+        has_onboarded: Boolean(profile.hasOnboarded),
         updated_at: new Date().toISOString(),
       });
     } catch (e) {
