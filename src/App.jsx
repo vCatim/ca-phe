@@ -672,7 +672,7 @@ function Summary({ db, rg }) {
     <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></div>);
 }
 
-function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onDelete, onReset, flash, onCloudLinked }) {
+function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onDelete, onReset, onDownloadCloud, flash, onCloudLinked }) {
   const [v, setV] = useState('menu'); // 'menu' | 'info' | 'link_email' | 'change_email' | 'del_confirm'
   const [f, setF] = useState(p);
   const [sure2, setSure2] = useState(false);
@@ -689,10 +689,26 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
     if (!cloudUser) return;
     setSyncing(true);
     try {
-      await syncService.uploadAll(cloudUser.id, db);
+      const uploaded = await syncService.uploadAll(cloudUser.id, db);
+      if (!uploaded) throw new Error('Upload failed');
       flash(`🎉 Đã sao lưu toàn bộ ${db.tasks.length} việc, ${db.txs.length} chi tiêu và ${db.goals.length} mục tiêu lên email!`);
     } catch (e) {
       flash('❌ Không thể đồng bộ, hãy kiểm tra kết nối mạng.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const doDownloadCloud = async () => {
+    if (!cloudUser || !window.confirm('Tải dữ liệu mới nhất từ cloud sẽ thay thế dữ liệu đang có trên máy này. Bạn có muốn tiếp tục?')) return;
+    setSyncing(true);
+    try {
+      const downloaded = await syncService.fetchAll(cloudUser.id);
+      if (!downloaded) throw new Error('Download failed');
+      onDownloadCloud(downloaded);
+      flash('☁️ Đã tải dữ liệu mới nhất từ Email về máy này.');
+    } catch (e) {
+      flash('❌ Không thể tải dữ liệu từ cloud, hãy kiểm tra kết nối mạng.');
     } finally {
       setSyncing(false);
     }
@@ -723,7 +739,21 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
       // Lấy lịch có sẵn trên cloud trước khi đẩy dữ liệu local lên. Điều này
       // tránh nhân đôi cùng một sự kiện khi người dùng liên kết lại email cũ.
       const cloud = await syncService.fetchAll(user.id);
-      const mergedDb = { ...db, tasks: mergeUniqueTasks(cloud?.tasks, db.tasks) };
+      const mergeById = (cloudItems = [], localItems = []) => {
+        const ids = new Set(cloudItems.map(item => String(item.id)));
+        return [...cloudItems, ...localItems.filter(item => !ids.has(String(item.id)))];
+      };
+      const mergeGroups = (cloudGroups = [], localGroups = []) => {
+        const names = new Set(cloudGroups.map(group => group.name.toLocaleLowerCase('vi-VN')));
+        return [...cloudGroups, ...localGroups.filter(group => !names.has(group.name.toLocaleLowerCase('vi-VN')))];
+      };
+      const mergedDb = {
+        ...db,
+        groups: mergeGroups(cloud?.groups, db.groups),
+        tasks: mergeUniqueTasks(cloud?.tasks, db.tasks),
+        goals: mergeById(cloud?.goals, db.goals),
+        txs: mergeById(cloud?.txs, db.txs),
+      };
       const uploaded = await syncService.uploadAll(user.id, mergedDb);
       if (!uploaded) throw new Error('Không thể đồng bộ dữ liệu lên email, hãy kiểm tra kết nối rồi thử lại.');
       if (onCloudLinked) onCloudLinked(user, mergedDb);
@@ -777,7 +807,7 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
               <div className="col gap" style={{ gap: 8 }}>
                 <div className="row between s">
                   <span style={{ color: 'var(--ok)', fontWeight: 600 }}>☁️ Đã liên kết Email</span>
-                  <span className="tag" style={{ background: 'color-mix(in srgb,var(--ok) 18%,transparent)', color: 'var(--ok)' }}>Đang đồng bộ</span>
+                  <span className="tag" style={{ background: 'color-mix(in srgb,var(--ok) 18%,transparent)', color: 'var(--ok)' }}>Đã liên kết</span>
                 </div>
                 <div style={{ wordBreak: 'break-all' }}>
                   <b>{cloudUser.email}</b>
@@ -788,6 +818,9 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
                 <div className="row gap wrap" style={{ marginTop: 2 }}>
                   <button className="btn sm" disabled={syncing} onClick={doSyncAll} style={{ flex: 1 }}>
                     {syncing ? 'Đang tải...' : '🔄 Tải dữ liệu máy này lên Email'}
+                  </button>
+                  <button className="btn sm out" disabled={syncing} onClick={doDownloadCloud} style={{ flex: 1 }}>
+                    {syncing ? 'Đang tải...' : '☁️ Tải dữ liệu từ Email'}
                   </button>
                   <button className="btn sm out" onClick={() => { setNewEmail(''); setV('change_email'); }}>
                     ✏️ Đổi email
@@ -1163,10 +1196,18 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
         }}
         onLogout={onLogout}
         onDelete={onDelete}
-        onReset={() => {
+        onReset={async () => {
+          if (cloudUser) {
+            const cleared = await syncService.clearUserData(cloudUser.id);
+            if (!cleared) {
+              flash('❌ Không thể xóa dữ liệu trên cloud. Dữ liệu trên máy vẫn được giữ nguyên.');
+              return;
+            }
+          }
           setDb(d => ({ ...d, tasks: [], txs: [], goals: [] }));
           setModal(null);
         }}
+        onDownloadCloud={downloaded => setDb(upgrade({ ...downloaded, tasks: dedupeTasks(downloaded.tasks) }))}
         flash={flash}
         onCloudLinked={(user, linkedDb) => {
           setCloudUser(user);
@@ -1174,7 +1215,14 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked }) {
         }}
       />
     )}
-    {modal?.k === 'groups' && <GroupsModal groups={db.groups} onClose={() => setModal(null)} onAdd={name => setDb(d => ({ ...d, groups: [...d.groups, { name, share: .1, color: PAL[d.groups.length % PAL.length] }] }))} onRemove={name => setDb(d => ({ ...d, groups: d.groups.filter(g => g.name !== name) }))} />}
+    {modal?.k === 'groups' && <GroupsModal groups={db.groups} onClose={() => setModal(null)} onAdd={name => {
+      const group = { name, share: .1, color: PAL[db.groups.length % PAL.length] };
+      setDb(d => ({ ...d, groups: [...d.groups, group] }));
+      if (cloudUser) syncService.upsertGroup(cloudUser.id, group);
+    }} onRemove={name => {
+      setDb(d => ({ ...d, groups: d.groups.filter(g => g.name !== name) }));
+      if (cloudUser) syncService.deleteGroup(cloudUser.id, name);
+    }} />}
     {modal?.k === 'list' && <TxList db={db} type={modal.type} date={modal.date} onClose={() => setModal(null)} onAdd={() => openTx(modal.type, { date: modal.date || today() })} onEdit={x => openTx(x.type, x)} onDel={id => del('txs', id)} />}
   </div>);
 }

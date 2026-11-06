@@ -11,7 +11,7 @@ Chạy được trên điện thoại lẫn máy tính, cài được như app (
 - **Nhập lịch từ Google Calendar** qua file `.ics` (hỗ trợ lịch lặp, buổi bị dời/hủy), file chỉ được đọc ngay trên máy bạn
 - **Tài chính**: thu/chi theo nhóm việc, biểu đồ, tổng kết tuần và tháng
 - **Mục tiêu**: nhiều mục tiêu, mức ưu tiên, bật tự động cộng/trừ theo thu/chi (việc đã hoàn thành và khoản không gắn việc)
-- **Tài khoản & đồng bộ**: đăng nhập Supabase, sao lưu dữ liệu giữa thiết bị; khi liên kết hoặc nhập lịch, các sự kiện có cùng tiêu đề, ngày và giờ sẽ tự được bỏ qua để không bị trùng
+- **Tài khoản & đồng bộ**: đăng nhập Supabase, sao lưu dữ liệu giữa thiết bị; có thể chủ động tải bản dữ liệu cloud mới nhất về máy. Khi liên kết hoặc nhập lịch, các sự kiện có cùng tiêu đề, ngày và giờ sẽ tự được bỏ qua để không bị trùng
 - **Xóa tài khoản**: khi đang đăng nhập, xóa tài khoản sẽ xóa cả dữ liệu và tài khoản trên Supabase; với tài khoản dùng thử, dữ liệu chỉ bị xóa trên máy
 - Dữ liệu vẫn dùng được khi mất mạng nhờ localStorage và PWA
 

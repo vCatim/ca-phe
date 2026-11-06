@@ -20,6 +20,9 @@ export const syncService = {
       if (tRes.error) console.error('Fetch tasks error:', tRes.error);
       if (gRes.error) console.error('Fetch goals error:', gRes.error);
       if (txRes.error) console.error('Fetch txs error:', txRes.error);
+      // Không được trả về một database rỗng khi chỉ một truy vấn gặp lỗi:
+      // thao tác tải từ cloud có thể dùng kết quả này để thay thế dữ liệu local.
+      if ([pRes, grpRes, tRes, gRes, txRes].some(result => result.error)) return null;
 
       // Chuyển đổi dữ liệu DB -> định dạng App
       const profile = pRes.data
@@ -84,13 +87,14 @@ export const syncService = {
     try {
       // 1. Profile
       if (db.profile) {
-        await supabase.from('profiles').upsert({
+        const { error } = await supabase.from('profiles').upsert({
           id: userId,
           name: db.profile.name || 'Người dùng',
           budget: db.profile.budget || 0,
           income: db.profile.income || 0,
           updated_at: new Date().toISOString(),
         });
+        if (error) throw error;
       }
 
       // 2. Groups
@@ -102,7 +106,8 @@ export const syncService = {
           share: g.share,
           color: g.color,
         }));
-        await supabase.from('groups').upsert(rows);
+        const { error } = await supabase.from('groups').upsert(rows);
+        if (error) throw error;
       }
 
       // 3. Tasks. So sánh với dữ liệu cloud trước khi ghi: cùng lịch từ
@@ -130,7 +135,10 @@ export const syncService = {
           note: t.note || '',
           status: t.status || 'todo',
           }));
-        if (rows.length) await supabase.from('tasks').upsert(rows);
+        if (rows.length) {
+          const { error } = await supabase.from('tasks').upsert(rows);
+          if (error) throw error;
+        }
       }
 
       // 4. Goals
@@ -145,7 +153,8 @@ export const syncService = {
           pri: g.pri,
           auto: g.auto !== false,
         }));
-        await supabase.from('goals').upsert(rows);
+        const { error } = await supabase.from('goals').upsert(rows);
+        if (error) throw error;
       }
 
       // 5. Transactions
@@ -164,7 +173,8 @@ export const syncService = {
           tk: x.tk || '',
           alloc: x.alloc || null,
         }));
-        await supabase.from('transactions').upsert(rows);
+        const { error } = await supabase.from('transactions').upsert(rows);
+        if (error) throw error;
       }
 
       return true;
@@ -187,6 +197,55 @@ export const syncService = {
       });
     } catch (e) {
       console.error(e);
+    }
+  },
+
+  // Lưu và xóa nhóm chi tiêu. Trước đây nhóm chỉ được sao lưu trong lần upload toàn bộ.
+  async upsertGroup(userId, group) {
+    if (!supabase || !userId || !group?.name) return false;
+    try {
+      const { error } = await supabase.from('groups').upsert({
+        id: `${userId}_${group.name}`,
+        user_id: userId,
+        name: group.name,
+        share: group.share,
+        color: group.color,
+      });
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  },
+
+  async deleteGroup(userId, groupName) {
+    if (!supabase || !userId || !groupName) return false;
+    try {
+      const { error } = await supabase.from('groups').delete().eq('user_id', userId).eq('name', groupName);
+      if (error) throw error;
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  },
+
+  // Xóa phần dữ liệu mà thao tác "xóa toàn bộ" trong ứng dụng đề cập đến.
+  async clearUserData(userId) {
+    if (!supabase || !userId) return false;
+    try {
+      const results = await Promise.all([
+        supabase.from('tasks').delete().eq('user_id', userId),
+        supabase.from('transactions').delete().eq('user_id', userId),
+        supabase.from('goals').delete().eq('user_id', userId),
+      ]);
+      const failed = results.find(result => result.error);
+      if (failed) throw failed.error;
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
     }
   },
 
