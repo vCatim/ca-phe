@@ -33,19 +33,20 @@ export function NotificationModal({ onClose, tasks = [], flash }) {
     saveNotificationSettings(updated);
 
     if (enabled) {
-      resyncAllReminders(tasks);
+      await resyncAllReminders(tasks);
       if (flash) flash('🔔 Đã bật thông báo nhắc lịch');
     } else {
+      await resyncAllReminders([]);
       if (flash) flash('🔕 Đã tắt thông báo');
     }
   };
 
-  const handleChangeLeadMinutes = (leadMinutes) => {
+  const handleChangeLeadMinutes = async (leadMinutes) => {
     const updated = { ...settings, leadMinutes: Number(leadMinutes) };
     setSettings(updated);
     saveNotificationSettings(updated);
     if (updated.enabled) {
-      resyncAllReminders(tasks);
+      await resyncAllReminders(tasks);
     }
     if (flash) flash(`Đã đổi: Nhắc trước ${leadMinutes} phút`);
   };
@@ -66,8 +67,8 @@ export function NotificationModal({ onClose, tasks = [], flash }) {
 
   const leadOptions = [
     [0, 'Đúng giờ bắt đầu (0 phút)'],
-    [5, 'Trước 5 phút'],
-    [10, 'Trước 10 phút (Khuyên dùng)'],
+    [5, 'Trước 5 phút (Khuyên dùng)'],
+    [10, 'Trước 10 phút'],
     [15, 'Trước 15 phút'],
     [30, 'Trước 30 phút'],
   ];

@@ -8,7 +8,7 @@ import { dedupeTasks, goalFingerprint, mergeUniqueByFingerprint, mergeUniqueTask
 import { GoogleSyncModal } from './GoogleSyncModal';
 import { syncSingleTaskWithGoogle } from './googleSync';
 import { NotificationModal } from './NotificationModal';
-import { scheduleTaskReminder, cancelTaskReminder, startWebNotificationWatcher, resyncAllReminders } from './notificationManager';
+import { scheduleTaskReminder, cancelTaskReminder, startWebNotificationWatcher, resyncAllReminders, ensureNotificationChannel } from './notificationManager';
 
 // ---------- 1) Tiện ích ----------
 const pad = n => String(n).padStart(2, '0');
@@ -478,9 +478,6 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, imp
     const mx = e.clientX - k.x, my = e.clientY - k.y, v = Math.abs(k.axis === 'x' ? mx : my) / Math.max(1, Date.now() - k.t);
     if (k.axis === 'x') { if (Math.abs(mx) > W() * .25 || (v > .5 && Math.abs(mx) > 30)) commit(mx < 0 ? 1 : -1); else setDrag(null); }
     else { const cn = Math.min(1, Math.max(0, col - my / rng)), t = v > .4 && Math.abs(my) > 25 ? (my < 0 ? 1 : 0) : (cn > .5 ? 1 : 0); setDrag(null); settleCol(t); } };
-  const copyW = () => { const items = db.tasks.filter(x => x.date >= days[0] && x.date <= days[6]).map(x => ({ ...x, off: dBetween(ws, x.date) })); setClip({ kind: 'week', items }); say(`Đã sao chép tuần (${items.length} việc)`); };
-  const copyD = () => { const items = dayTasks(sel).map(x => ({ ...x, off: 0 })); setClip({ kind: 'day', items }); say(`Đã sao chép ngày (${items.length} việc)`); };
-  const paste = () => { const n = pasteClip(clip.kind === 'week' ? ws : sel); say(n ? `Đã dán ${n} việc` : 'Không có việc nào để dán (hoặc đã có sẵn)'); };
   const list = dayTasks(sel), add = () => { openTask({ date: sel, title: q.trim() }); setQ(''); };
   const handleIcs = async e => {
     const file = e.target.files?.[0];
@@ -508,8 +505,6 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, imp
         <button className="btn sm desk" onClick={() => openTask({ date: sel })}>+ Thêm việc</button></div></div>
     <p className="mut s desk">{days[0].split('-').reverse().join('/')} – {days[6].split('-').reverse().join('/')}</p>
     <div className="row gap wrap">
-  <button className="btn sm out" onClick={copyW}>⧉ Sao chép tuần</button>
-  <button className="btn sm out" onClick={copyD}>⧉ Sao chép ngày</button>
   <button className="btn sm out" onClick={() => fileRef.current?.click()}>📥 Nhập lịch .ics</button>
   <button className="btn sm out" onClick={openGoogleSync} title="Đồng bộ 2 chiều với Google Calendar và Google Tasks">🔄 Google Sync</button>
   <button className="btn sm out" onClick={openNotification} title="Cài đặt thông báo nhắc lịch">🔔 Nhắc việc</button>
@@ -520,7 +515,7 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, imp
     onChange={handleIcs}
     style={{ display: 'none' }}
   />
-      {clip && <button className="btn sm" onClick={paste}>📋 Dán {clip.kind === 'week' ? 'tuần' : 'ngày'}</button>}{msg && <span className="s" style={{ color: 'var(--ok)' }}>{msg}</span>}</div>
+      {msg && <span className="s" style={{ color: 'var(--ok)' }}>{msg}</span>}</div>
     {/* Desktop: lưới tuần */}
     <div className="card wk desk" onWheel={e => { if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 20 && !wheelLock.current) { wheelLock.current = true; go(e.deltaX > 0 ? 1 : -1); setTimeout(() => { wheelLock.current = false; }, 500); } }}><div className={'wkanim ' + (dir === 'n' ? 'wn' : 'wp')} key={ws}><div className="wkh"><i />{days.map((d, i) => <div key={d} className={(d === today() ? 'tdy ' : '') + (d === sel ? 'selh' : '')} onClick={() => setSel(d)}>{DAYS[i]} <b>{d.slice(8)}</b></div>)}</div>
       <div className="wkscroll" ref={wkRef}><div className="wkb" style={{ height: HR * HH }}><div className="hrs">{[...Array(HR)].map((_, i) => <span key={i} style={{ height: HH }}>{i > 0 ? pad(H0 + i) + ':00' : ''}</span>)}</div>
@@ -926,6 +921,8 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
   const [homeDate, setHomeDate] = useState(today());
 
   useEffect(() => {
+    ensureNotificationChannel();
+    resyncAllReminders(db.tasks);
     startWebNotificationWatcher(() => db.tasks, (task) => {
       flash(`🔔 Sắp đến giờ: "${task.title}" lúc ${task.start}`);
     });
@@ -1033,7 +1030,11 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
       return { ...d, tasks: old ? d.tasks.map(x => x.id === clean.id ? clean : x) : [...d.tasks, clean] };
     });
     if (cloudUser) syncService.upsertTask(cloudUser.id, clean);
-    scheduleTaskReminder(clean);
+    if (clean.status === 'done') {
+      cancelTaskReminder(clean);
+    } else {
+      scheduleTaskReminder(clean);
+    }
     flash(`Đã lưu: "${clean.title}"`);
     setModal(null);
     try {

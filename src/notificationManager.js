@@ -4,6 +4,7 @@ import { LocalNotifications } from '@capacitor/local-notifications';
 
 const SETTINGS_KEY = 'caphe_notification_settings';
 const NOTIFIED_TASKS_KEY = 'caphe_notified_tasks';
+export const REMINDER_CHANNEL_ID = 'reminders';
 
 const hashCode = (str) => {
   let hash = 0;
@@ -19,21 +20,48 @@ const hashCode = (str) => {
 export const getNotificationSettings = () => {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { enabled: true, leadMinutes: 10, sound: true };
-    return { enabled: true, leadMinutes: 10, sound: true, ...JSON.parse(raw) };
+    if (!raw) return { enabled: true, leadMinutes: 5, sound: true };
+    const parsed = JSON.parse(raw);
+    return {
+      enabled: parsed.enabled ?? true,
+      leadMinutes: typeof parsed.leadMinutes === 'number' ? parsed.leadMinutes : 5,
+      sound: parsed.sound ?? true,
+    };
   } catch (e) {
-    return { enabled: true, leadMinutes: 10, sound: true };
+    return { enabled: true, leadMinutes: 5, sound: true };
   }
 };
 
 export const saveNotificationSettings = (settings) => {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  try {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  } catch (e) {}
+};
+
+// Khởi tạo kênh thông báo ưu tiên cao trên Android (bắt buộc từ Android 8.0+)
+export const ensureNotificationChannel = async () => {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await LocalNotifications.createChannel({
+        id: REMINDER_CHANNEL_ID,
+        name: 'Nhắc nhở công việc',
+        description: 'Thông báo nhắc nhở các công việc sắp diễn ra',
+        importance: 5, // IMPORTANCE_HIGH (5): âm thanh + rung + pop-up heads-up banner
+        visibility: 1, // VISIBILITY_PUBLIC (1): hiện trên màn hình khóa
+        vibration: true,
+        lights: true,
+      });
+    } catch (e) {
+      console.warn('Lỗi tạo notification channel:', e);
+    }
+  }
 };
 
 // Yêu cầu quyền thông báo từ hệ điều hành / trình duyệt
 export const requestNotificationPermission = async () => {
   if (Capacitor.isNativePlatform()) {
     try {
+      await ensureNotificationChannel();
       const status = await LocalNotifications.requestPermissions();
       return status.display === 'granted';
     } catch (e) {
@@ -73,38 +101,85 @@ export const checkNotificationPermission = async () => {
   return false;
 };
 
+// Hủy thông báo của 1 task khi bị xóa hoặc hoàn thành
+export const cancelTaskReminder = async (task) => {
+  if (!task || !task.id) return;
+  const notifId = hashCode(task.id);
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await LocalNotifications.cancel({
+        notifications: [{ id: notifId }],
+      });
+    } catch (e) {
+      console.warn('Lỗi hủy Native Notification:', e);
+    }
+  }
+};
+
 // Lên lịch thông báo cho 1 task
-export const scheduleTaskReminder = async (task, leadMinutes = 10) => {
-  if (!task || !task.date || !task.start || task.status === 'done') return;
+export const scheduleTaskReminder = async (task, leadMinutes) => {
+  if (!task || !task.id || !task.date || !task.start) return;
 
-  const [h, m] = task.start.split(':').map(Number);
-  const targetDate = new Date(`${task.date}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`);
+  const settings = getNotificationSettings();
+  if (!settings.enabled) return;
 
-  // Trừ đi số phút nhắc trước
-  const notifyTime = new Date(targetDate.getTime() - leadMinutes * 60 * 1000);
+  // Nếu việc đã hoàn thành -> hủy thông báo và thoát
+  if (task.status === 'done') {
+    await cancelTaskReminder(task);
+    return;
+  }
+
+  // Số phút nhắc trước (ưu tiên tham số truyền vào, nếu không có lấy theo cài đặt người dùng)
+  const effectiveLead = typeof leadMinutes === 'number'
+    ? leadMinutes
+    : (typeof settings.leadMinutes === 'number' ? settings.leadMinutes : 5);
+
+  const [y, mth, d] = String(task.date).split('-').map(Number);
+  const [h, m] = String(task.start).split(':').map(Number);
+  if (isNaN(y) || isNaN(mth) || isNaN(d) || isNaN(h) || isNaN(m)) return;
+
+  // Giờ bắt đầu chính xác theo múi giờ thiết bị địa phương
+  const targetDate = new Date(y, mth - 1, d, h, m, 0, 0);
   const now = new Date();
 
-  // Nếu thời điểm thông báo đã qua, không lên lịch nữa
-  if (notifyTime <= now) return;
+  // Nếu công việc đã bắt đầu quá 1 phút trước, không nhắc nữa
+  if (now.getTime() - targetDate.getTime() > 60 * 1000) {
+    return;
+  }
 
-  const notifId = hashCode(`${task.id}_${task.date}_${task.start}`);
+  // Thời điểm cần phát chuông báo
+  let notifyTime = new Date(targetDate.getTime() - effectiveLead * 60 * 1000);
+
+  // Nếu thời điểm nhắc trước đã qua (ví dụ: tạo việc lúc còn 3 phút nữa là đến giờ,
+  // nhưng cài đặt nhắc trước 5 phút) -> phát thông báo ngay sau 1.5 giây
+  if (notifyTime.getTime() <= now.getTime()) {
+    notifyTime = new Date(Date.now() + 1500);
+  }
+
+  const notifId = hashCode(task.id);
+  const diffMinutes = Math.max(0, Math.round((targetDate.getTime() - notifyTime.getTime()) / 60000));
+
   const title = `☕ Nhắc việc: ${task.title}`;
-  const body = leadMinutes > 0
-    ? `Sắp bắt đầu lúc ${task.start} (còn ${leadMinutes} phút)${task.note ? ' · ' + task.note : ''}`
+  const body = diffMinutes > 0
+    ? `Sắp bắt đầu lúc ${task.start} (còn ~${diffMinutes} phút)${task.note ? ' · ' + task.note : ''}`
     : `Bắt đầu lúc ${task.start}${task.note ? ' · ' + task.note : ''}`;
 
   if (Capacitor.isNativePlatform()) {
-    // 1. ANDROID NATIVE ALARM (Không cần app chạy ngầm, 0% RAM)
     try {
+      await ensureNotificationChannel();
       await LocalNotifications.schedule({
         notifications: [
           {
             title,
             body,
             id: notifId,
-            schedule: { at: notifyTime },
-            sound: 'beep.wav',
-            actionTypeId: '',
+            schedule: {
+              at: notifyTime,
+              allowWhileIdle: true, // Đánh thức CPU ở chế độ Doze/màn hình khóa trên Android
+            },
+            channelId: REMINDER_CHANNEL_ID,
+            autoCancel: true,
             extra: {
               taskId: task.id,
               date: task.date,
@@ -118,43 +193,44 @@ export const scheduleTaskReminder = async (task, leadMinutes = 10) => {
   }
 };
 
-// Hủy thông báo của 1 task khi bị xóa hoặc hoàn thành
-export const cancelTaskReminder = async (task) => {
-  if (!task || !task.id) return;
-  const notifId = hashCode(`${task.id}_${task.date}_${task.start}`);
-
-  if (Capacitor.isNativePlatform()) {
-    try {
-      await LocalNotifications.cancel({
-        notifications: [{ id: notifId }],
-      });
-    } catch (e) {
-      console.warn('Lỗi hủy Native Notification:', e);
-    }
-  }
-};
-
-// Lên lịch lại toàn bộ các task sắp tới (dùng khi mở app hoặc cập nhật danh sách task)
+// Lên lịch lại toàn bộ các task sắp tới
 export const resyncAllReminders = async (tasks = []) => {
   const settings = getNotificationSettings();
-  if (!settings.enabled) return;
+  if (!settings.enabled) {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const pending = await LocalNotifications.getPending();
+        if (pending?.notifications?.length) {
+          await LocalNotifications.cancel({
+            notifications: pending.notifications.map(n => ({ id: n.id })),
+          });
+        }
+      } catch (e) {}
+    }
+    return;
+  }
 
   const hasPerm = await checkNotificationPermission();
   if (!hasPerm) return;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const upcomingTasks = (tasks || []).filter(t => t.date >= todayStr && t.status !== 'done');
+  await ensureNotificationChannel();
+
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+  const upcomingTasks = (tasks || []).filter(t => t && t.date >= todayStr && t.status !== 'done');
 
   for (const task of upcomingTasks) {
     await scheduleTaskReminder(task, settings.leadMinutes);
   }
 };
 
-// Bộ đếm quét định kỳ trên Web Desktop (cho trình duyệt)
+// Quét định kỳ trên Web Desktop (cho trình duyệt)
 let webWatcherInterval = null;
 
 export const startWebNotificationWatcher = (getTasksCallback, onNotifyCallback) => {
-  if (Capacitor.isNativePlatform()) return; // Trên Android native đã có AlarmManager, không cần vòng lặp
+  if (Capacitor.isNativePlatform()) return; // Trên Android native đã dùng AlarmManager
   if (typeof window === 'undefined' || !('Notification' in window)) return;
 
   if (webWatcherInterval) clearInterval(webWatcherInterval);
@@ -175,22 +251,28 @@ export const startWebNotificationWatcher = (getTasksCallback, onNotifyCallback) 
       if (raw) notifiedSet = new Set(JSON.parse(raw));
     } catch (e) {}
 
-    const leadMs = (settings.leadMinutes || 10) * 60 * 1000;
+    const leadMinutes = typeof settings.leadMinutes === 'number' ? settings.leadMinutes : 5;
+    const leadMs = leadMinutes * 60 * 1000;
 
-    tasks.filter(t => t.date === todayStr && t.status !== 'done').forEach(task => {
+    tasks.filter(t => t && t.date === todayStr && t.status !== 'done').forEach(task => {
       const [h, m] = (task.start || '09:00').split(':').map(Number);
       const startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0).getTime();
       const diff = startTime - now.getTime();
 
       const notifKey = `${task.id}_${todayStr}_${task.start}`;
 
-      // Bắn thông báo khi thời gian còn lại nằm trong khoảng [0, leadMs] và chưa từng thông báo
-      if (diff >= 0 && diff <= leadMs && !notifiedSet.has(notifKey)) {
+      // Bắn thông báo khi thời gian còn lại nằm trong khoảng nhắc trước và chưa trôi qua quá 1 phút
+      if (diff >= -60000 && diff <= leadMs && !notifiedSet.has(notifKey)) {
         notifiedSet.add(notifKey);
-        localStorage.setItem(NOTIFIED_TASKS_KEY, JSON.stringify([...notifiedSet]));
+        try {
+          localStorage.setItem(NOTIFIED_TASKS_KEY, JSON.stringify([...notifiedSet]));
+        } catch (e) {}
 
         const title = `☕ Nhắc việc: ${task.title}`;
-        const body = `Sắp bắt đầu lúc ${task.start} (còn ~${Math.round(diff / 60000)} phút)${task.note ? ' · ' + task.note : ''}`;
+        const diffMin = Math.max(0, Math.round(diff / 60000));
+        const body = diffMin > 0
+          ? `Sắp bắt đầu lúc ${task.start} (còn ~${diffMin} phút)${task.note ? ' · ' + task.note : ''}`
+          : `Bắt đầu lúc ${task.start}${task.note ? ' · ' + task.note : ''}`;
 
         try {
           new Notification(title, {
@@ -203,7 +285,7 @@ export const startWebNotificationWatcher = (getTasksCallback, onNotifyCallback) 
         if (onNotifyCallback) onNotifyCallback(task);
       }
     });
-  }, 30000); // Quét mỗi 30 giây
+  }, 15000); // Quét mỗi 15 giây
 };
 
 // Gửi thông báo thử nghiệm (Test Notification)
@@ -212,6 +294,8 @@ export const sendTestNotification = async () => {
   if (!granted) {
     throw new Error('Bạn chưa cấp quyền thông báo cho ứng dụng.');
   }
+
+  await ensureNotificationChannel();
 
   const title = '☕ Cà Phê: Thông báo hoạt động tốt!';
   const body = 'Hệ thống nhắc việc đã sẵn sàng trên thiết bị của bạn ✨';
@@ -222,8 +306,13 @@ export const sendTestNotification = async () => {
         {
           title,
           body,
-          id: Math.floor(Math.random() * 100000),
-          schedule: { at: new Date(Date.now() + 1000) }, // Sau 1 giây
+          id: Math.floor(Math.random() * 100000) + 1,
+          schedule: {
+            at: new Date(Date.now() + 1500),
+            allowWhileIdle: true,
+          },
+          channelId: REMINDER_CHANNEL_ID,
+          autoCancel: true,
         },
       ],
     });
