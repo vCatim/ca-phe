@@ -45,4 +45,5 @@ React · Vite · vite-plugin-pwa · ical.js · localStorage
 - [x] Kết nối và đồng bộ hai chiều trực tiếp với Google Calendar & Google Tasks
 - [x] Tài khoản và đồng bộ Supabase, chống trùng lịch
 - [x] Xóa tài khoản cloud an toàn
-- [ ] Thông báo nhắc lịch
+- [x] Thông báo nhắc lịch (Native AlarmManager trên Android & Web Notifications)
+- [x] Khởi tạo dự án Android native (Capacitor) & GitHub Actions build APK tự động

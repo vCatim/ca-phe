@@ -7,6 +7,8 @@ import { AuthScreen } from './AuthScreen';
 import { dedupeTasks, goalFingerprint, mergeUniqueByFingerprint, mergeUniqueTasks, taskFingerprint, transactionFingerprint } from './taskIdentity';
 import { GoogleSyncModal } from './GoogleSyncModal';
 import { syncSingleTaskWithGoogle } from './googleSync';
+import { NotificationModal } from './NotificationModal';
+import { scheduleTaskReminder, cancelTaskReminder, startWebNotificationWatcher, resyncAllReminders } from './notificationManager';
 
 // ---------- 1) Tiện ích ----------
 const pad = n => String(n).padStart(2, '0');
@@ -439,7 +441,7 @@ function DatePicker({ value, tasks, onPick, onClose }) {
     <div className="row between"><button className="btn sm out" onClick={() => onPick(today())}>Hôm nay</button><button className="btn sm out" onClick={onClose}>Đóng</button></div></Modal>);
 }
 
-function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, importIcs, openGoogleSync }) {
+function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, importIcs, openGoogleSync, openNotification }) {
   const [sel, setSel] = useState(today()), [col, setCol] = useState(0), [dir, setDir] = useState('n'), [ys, setYs] = useState(false), [drag, setDrag] = useState(null), [noTr, setNoTr] = useState(false);
   const [q, setQ] = useState(''), [msg, setMsg] = useState(''), sw = useRef(null), clipRef = useRef(null), wheelLock = useRef(false), fileRef = useRef(null), wkRef = useRef(null), [pick, setPick] = useState(false);
   useEffect(() => { if (wkRef.current) wkRef.current.scrollTop = 6.5 * 48; }, [sel.slice(0, 8) + wkStart(sel)]); // mở ra thì cuộn tới khoảng 6:30 sáng
@@ -510,6 +512,7 @@ function Calendar({ db, openTask, toggle, delTask, clip, setClip, pasteClip, imp
   <button className="btn sm out" onClick={copyD}>⧉ Sao chép ngày</button>
   <button className="btn sm out" onClick={() => fileRef.current?.click()}>📥 Nhập lịch .ics</button>
   <button className="btn sm out" onClick={openGoogleSync} title="Đồng bộ 2 chiều với Google Calendar và Google Tasks">🔄 Google Sync</button>
+  <button className="btn sm out" onClick={openNotification} title="Cài đặt thông báo nhắc lịch">🔔 Nhắc việc</button>
   <input
     ref={fileRef}
     type="file"
@@ -645,7 +648,7 @@ function Summary({ db, rg }) {
     <ul>{notes.map((n, i) => <li key={i}>{n}</li>)}</ul></div>);
 }
 
-function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onDelete, onReset, onDownloadCloud, flash, onCloudLinked, openGoogleSync }) {
+function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onDelete, onReset, onDownloadCloud, flash, onCloudLinked, openGoogleSync, openNotification }) {
   const [v, setV] = useState('menu'); // 'menu' | 'info' | 'link_email' | 'change_email' | 'del_confirm'
   const [f, setF] = useState(p);
   const [sure2, setSure2] = useState(false);
@@ -811,6 +814,7 @@ function ProfileModal({ p, counts, db, cloudUser, onClose, onSave, onLogout, onD
 
           <button className="btn out" onClick={() => setV('info')}>👤 Sửa thông tin cá nhân & Ngân sách</button>
           <button className="btn out" onClick={() => { onClose(); if (openGoogleSync) openGoogleSync(); }}>📅 Đồng bộ Google Calendar & Tasks</button>
+          <button className="btn out" onClick={() => { onClose(); if (openNotification) openNotification(); }}>🔔 Cài đặt thông báo nhắc việc</button>
           <button className="btn out" onClick={onLogout}>🚪 Đăng xuất</button>
           <button className="btn out dng" onClick={() => setV('del_confirm')}>🗑 Xóa tài khoản này</button>
         </>
@@ -922,6 +926,12 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
   const [homeDate, setHomeDate] = useState(today());
 
   useEffect(() => {
+    startWebNotificationWatcher(() => db.tasks, (task) => {
+      flash(`🔔 Sắp đến giờ: "${task.title}" lúc ${task.start}`);
+    });
+  }, [db.tasks]);
+
+  useEffect(() => {
     authService.getUser().then(u => setCloudUser(u)).catch(() => {});
     const sub = authService.onAuthStateChange((_, session) => {
       setCloudUser(session?.user || null);
@@ -1023,6 +1033,7 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
       return { ...d, tasks: old ? d.tasks.map(x => x.id === clean.id ? clean : x) : [...d.tasks, clean] };
     });
     if (cloudUser) syncService.upsertTask(cloudUser.id, clean);
+    scheduleTaskReminder(clean);
     flash(`Đã lưu: "${clean.title}"`);
     setModal(null);
     try {
@@ -1042,6 +1053,7 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
     const t = db.tasks.find(x => x.id === id); if (!t) return;
     setDb(d => ({ ...d, tasks: d.tasks.filter(x => x.id !== id) }));
     if (cloudUser) syncService.deleteTask(cloudUser.id, id);
+    cancelTaskReminder(t);
     syncSingleTaskWithGoogle(t, 'delete').catch(() => {});
     flash('Đã xóa', () => {
       setDb(d => ({ ...d, tasks: [...d.tasks, t] }));
@@ -1096,7 +1108,8 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
     }
   };
   const openGoogleSync = () => setModal({ k: 'googleSync' });
-  const P = { db, openTx, openTask, openFund, openTransfer, openBalance, openList, openProfile, openGroups, openGoogleSync, clip, setClip, pasteClip, toggle, delTask, transferFund, deleteFund, adjustBalance, delTx: id => del('txs', id), importIcs, curDate: homeDate, setCurDate: setHomeDate };
+  const openNotification = () => setModal({ k: 'notif' });
+  const P = { db, openTx, openTask, openFund, openTransfer, openBalance, openList, openProfile, openGroups, openGoogleSync, openNotification, clip, setClip, pasteClip, toggle, delTask, transferFund, deleteFund, adjustBalance, delTx: id => del('txs', id), importIcs, curDate: homeDate, setCurDate: setHomeDate };
   return (<div className="app">
     <aside className="side"><div className="logo"><LogoIcon s={34} /> Cà Phê</div><small className="mut">Quản lý cuộc sống sinh viên</small>
       <nav>{NAV.map(([k, i, l]) => <button key={k} className={page === k ? 'on' : ''} onClick={() => setPage(k)}><span>{i}</span>{l}</button>)}</nav>
@@ -1123,6 +1136,7 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
         db={db}
         cloudUser={cloudUser}
         openGoogleSync={openGoogleSync}
+        openNotification={openNotification}
         onClose={() => setModal(null)}
         onSave={p => {
           const profile = { ...db.profile, ...p };
@@ -1172,6 +1186,13 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
             updatedTasks.forEach(item => syncService.upsertTask(cloudUser.id, item));
           }
         }}
+      />
+    )}
+    {modal?.k === 'notif' && (
+      <NotificationModal
+        onClose={() => setModal(null)}
+        tasks={db.tasks}
+        flash={flash}
       />
     )}
   </div>);
