@@ -9,6 +9,9 @@ import { GoogleSyncModal } from './GoogleSyncModal';
 import { syncSingleTaskWithGoogle } from './googleSync';
 import { NotificationModal } from './NotificationModal';
 import { scheduleTaskReminder, cancelTaskReminder, startWebNotificationWatcher, resyncAllReminders, ensureNotificationChannel } from './notificationManager';
+import { App as CapApp } from '@capacitor/app';
+import { StatusBar, Style } from '@capacitor/status-bar';
+import { Capacitor } from '@capacitor/core';
 
 // ---------- 1) Tiện ích ----------
 const pad = n => String(n).padStart(2, '0');
@@ -920,6 +923,51 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
   const [cloudUser, setCloudUser] = useState(null);
   const [homeDate, setHomeDate] = useState(today());
 
+  const modalRef = useRef(modal);
+  const pageRef = useRef(page);
+  modalRef.current = modal;
+  pageRef.current = page;
+
+  // 1. Quản lý màu và kiểu icon Status Bar theo theme trên Native Android
+  useEffect(() => {
+    if (Capacitor.isNativePlatform()) {
+      StatusBar.setOverlaysWebView({ overlay: false }).catch(() => {});
+      StatusBar.setBackgroundColor({ color: theme === 'light' ? '#f8f2e7' : '#16120e' }).catch(() => {});
+      StatusBar.setStyle({ style: theme === 'light' ? Style.Light : Style.Dark }).catch(() => {});
+    }
+  }, [theme]);
+
+  // 2. Xử lý nút Back phần cứng của Android
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    let lastBack = 0;
+    const listenerPromise = CapApp.addListener('backButton', () => {
+      // Nếu đang mở modal -> đóng modal trước
+      if (modalRef.current) {
+        setModal(null);
+        return;
+      }
+      // Nếu đang ở trang khác -> quay về Trang chính
+      if (pageRef.current !== 'today') {
+        setPage('today');
+        return;
+      }
+      // Đang ở Trang chính: bấm lần 2 trong 2s để thoát
+      const now = Date.now();
+      if (now - lastBack < 2000) {
+        CapApp.exitApp();
+      } else {
+        lastBack = now;
+        flash('Bấm lần nữa để thoát ứng dụng');
+      }
+    });
+
+    return () => {
+      listenerPromise.then(h => h.remove()).catch(() => {});
+    };
+  }, []);
+
   useEffect(() => {
     ensureNotificationChannel();
     resyncAllReminders(db.tasks);
@@ -1202,6 +1250,18 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
 export default function Root() {
   const [m, setM] = useState(loadMeta), [onboarding, setOnboarding] = useState(null);
   const theme = m.theme || 'dark';
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    if (!m.active) {
+      const listenerPromise = CapApp.addListener('backButton', () => {
+        CapApp.exitApp();
+      });
+      return () => {
+        listenerPromise.then(h => h.remove()).catch(() => {});
+      };
+    }
+  }, [m.active]);
   useEffect(() => { wr(META, { ...m, theme }); document.documentElement.dataset.theme = theme; }, [m, theme]);
   const toggleTheme = () => setM(x => ({ ...x, theme: (x.theme || 'dark') === 'dark' ? 'light' : 'dark' }));
 
