@@ -65,7 +65,7 @@ import { Onboarding } from './pages/Onboarding';
 // Xuất lại parseIcs cho tương thích
 export { parseIcs };
 
-function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleTheme, setTheme }) {
+function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, themeColor = 'coffee', toggleTheme, setTheme, setThemeColor }) {
   const [db, setDb] = useState(() => loadDb(id));
   const [page, setPage] = useState('today');
   const [modal, setModal] = useState(null);
@@ -87,7 +87,7 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
       StatusBar.setBackgroundColor({ color: theme === 'light' ? '#f8f2e7' : '#16120e' }).catch(() => {});
       StatusBar.setStyle({ style: theme === 'light' ? Style.Light : Style.Dark }).catch(() => {});
     }
-  }, [theme]);
+  }, [theme, themeColor]);
 
   // 2. Xử lý nút Back phần cứng của Android
   useEffect(() => {
@@ -136,6 +136,9 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
           if (cloud?.profile?.theme && setTheme) {
             setTheme(cloud.profile.theme);
           }
+          if (cloud?.profile?.themeColor && setThemeColor) {
+            setThemeColor(cloud.profile.themeColor);
+          }
           if (cloud?.profile?.notificationSettings) {
             saveNotificationSettings(cloud.profile.notificationSettings);
           }
@@ -150,16 +153,18 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
     };
   }, []);
 
-  const handleToggleTheme = () => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+  const handleThemeChange = ({ theme: nextTheme, themeColor: nextColor }) => {
+    const t = nextTheme || theme;
+    const c = nextColor || themeColor;
+    if (setTheme && nextTheme) setTheme(nextTheme);
+    if (setThemeColor && nextColor) setThemeColor(nextColor);
     if (cloudUser) {
-      syncService.saveTheme(cloudUser.id, nextTheme);
+      syncService.saveTheme(cloudUser.id, t, c);
       setDb(d => ({
         ...d,
-        profile: d.profile ? { ...d.profile, theme: nextTheme } : d.profile
+        profile: d.profile ? { ...d.profile, theme: t, themeColor: c } : d.profile
       }));
     }
-    toggleTheme();
   };
 
   useEffect(() => wr(ACC(id), db), [db]);
@@ -444,12 +449,22 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
             </button>
           ))}
         </nav>
-        <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
+        <ThemeToggle
+          theme={theme}
+          themeColor={themeColor}
+          onChangeTheme={handleThemeChange}
+          position="sidebar"
+        />
       </aside>
       <main>
         <div className="top">
           <div className="logo mobl"><LogoIcon s={26} /> Cà Phê</div>
-          <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
+          <ThemeToggle
+            theme={theme}
+            themeColor={themeColor}
+            onChangeTheme={handleThemeChange}
+            position="top"
+          />
         </div>
         <div key={page}>
           {page === 'today' && <Today {...P} />}
@@ -536,6 +551,9 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
             if (downloaded.profile?.theme && setTheme) {
               setTheme(downloaded.profile.theme);
             }
+            if (downloaded.profile?.themeColor && setThemeColor) {
+              setThemeColor(downloaded.profile.themeColor);
+            }
             if (downloaded.profile?.notificationSettings) {
               saveNotificationSettings(downloaded.profile.notificationSettings);
               resyncAllReminders(downloaded.tasks || []);
@@ -599,6 +617,7 @@ export default function Root() {
   const [m, setM] = useState(loadMeta);
   const [onboarding, setOnboarding] = useState(null);
   const theme = m.theme || 'dark';
+  const themeColor = m.themeColor || 'coffee';
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -613,11 +632,13 @@ export default function Root() {
   }, [m.active]);
 
   useEffect(() => {
-    wr(META, { ...m, theme });
+    wr(META, { ...m, theme, themeColor });
     document.documentElement.dataset.theme = theme;
-  }, [m, theme]);
+    document.documentElement.dataset.color = themeColor;
+  }, [m, theme, themeColor]);
 
   const setTheme = nextTheme => setM(x => ({ ...x, theme: nextTheme }));
+  const setThemeColor = nextColor => setM(x => ({ ...x, themeColor: nextColor }));
   const toggleTheme = () => setM(x => ({ ...x, theme: (x.theme || 'dark') === 'dark' ? 'light' : 'dark' }));
 
   const delAccount = async (accId, deleteCloud = false) => {
@@ -638,6 +659,9 @@ export default function Root() {
     wr(ACC(user.id), upgrade({ ...linkedDb, tasks: dedupeTasks(linkedDb.tasks) }));
     if (linkedDb.profile?.theme) {
       setTheme(linkedDb.profile.theme);
+    }
+    if (linkedDb.profile?.themeColor) {
+      setThemeColor(linkedDb.profile.themeColor);
     }
     if (linkedDb.profile?.notificationSettings) {
       saveNotificationSettings(linkedDb.profile.notificationSettings);
@@ -664,6 +688,9 @@ export default function Root() {
 
     if (cloudData?.profile?.theme) {
       setTheme(cloudData.profile.theme);
+    }
+    if (cloudData?.profile?.themeColor) {
+      setThemeColor(cloudData.profile.themeColor);
     }
     if (cloudData?.profile?.notificationSettings) {
       saveNotificationSettings(cloudData.profile.notificationSettings);
@@ -753,8 +780,10 @@ export default function Root() {
         onDelete={deleteCloud => delAccount(m.active, deleteCloud)}
         onCloudLinked={handleCloudLinked}
         theme={theme}
+        themeColor={themeColor}
         toggleTheme={toggleTheme}
         setTheme={setTheme}
+        setThemeColor={setThemeColor}
       />
     );
   }
@@ -766,7 +795,10 @@ export default function Root() {
       onDelAccount={delAccount}
       onCloudLogin={handleCloudLogin}
       theme={theme}
+      themeColor={themeColor}
       toggleTheme={toggleTheme}
+      setTheme={setTheme}
+      setThemeColor={setThemeColor}
     />
   );
 }

@@ -33,6 +33,7 @@ export const syncService = {
             cashBase: Number(pRes.data.cash_base) || 0,
             hasOnboarded: Boolean(pRes.data.has_onboarded),
             theme: pRes.data.theme || 'dark',
+            themeColor: pRes.data.theme_color || 'coffee',
             notificationSettings: pRes.data.notification_settings || null,
           }
         : null;
@@ -102,12 +103,18 @@ export const syncService = {
           cash_base: db.profile.cashBase || 0,
           has_onboarded: Boolean(db.profile.hasOnboarded),
           theme: db.profile.theme || 'dark',
+          theme_color: db.profile.themeColor || 'coffee',
           updated_at: new Date().toISOString(),
         };
         if (db.profile.notificationSettings !== undefined) {
           profilePayload.notification_settings = db.profile.notificationSettings;
         }
-        const { error } = await supabase.from('profiles').upsert(profilePayload);
+        let { error } = await supabase.from('profiles').upsert(profilePayload);
+        if (error && (error.message?.includes('theme_color') || error.code === '42703')) {
+          delete profilePayload.theme_color;
+          const retry = await supabase.from('profiles').upsert(profilePayload);
+          error = retry.error;
+        }
         if (error) throw error;
       }
 
@@ -226,21 +233,41 @@ export const syncService = {
         updated_at: new Date().toISOString(),
       };
       if (profile.theme) payload.theme = profile.theme;
+      if (profile.themeColor) payload.theme_color = profile.themeColor;
       if (profile.notificationSettings !== undefined) payload.notification_settings = profile.notificationSettings;
-      await supabase.from('profiles').upsert(payload);
+      let { error } = await supabase.from('profiles').upsert(payload);
+      if (error && (error.message?.includes('theme_color') || error.code === '42703')) {
+        delete payload.theme_color;
+        const retry = await supabase.from('profiles').upsert(payload);
+        error = retry.error;
+      }
+      if (error) throw error;
     } catch (e) {
       console.error(e);
     }
   },
 
-  // Cập nhật Theme riêng biệt
-  async saveTheme(userId, theme) {
+  // Cập nhật Theme & Bộ màu riêng biệt
+  async saveTheme(userId, themeMode, themeColor = 'coffee') {
     if (!supabase || !userId) return;
     try {
-      await supabase.from('profiles').update({
-        theme,
+      const updateData = {
         updated_at: new Date().toISOString(),
-      }).eq('id', userId);
+      };
+      if (themeMode) updateData.theme = themeMode;
+      if (themeColor) updateData.theme_color = themeColor;
+
+      const { error } = await supabase.from('profiles').update(updateData).eq('id', userId);
+      if (error) {
+        if (error.message?.includes('theme_color') || error.code === '42703') {
+          await supabase.from('profiles').update({
+            theme: themeMode,
+            updated_at: new Date().toISOString(),
+          }).eq('id', userId);
+        } else {
+          console.error('Error saving theme to Supabase:', error);
+        }
+      }
     } catch (e) {
       console.error('Error saving theme to Supabase:', e);
     }

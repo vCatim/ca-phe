@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { authService } from './supabase';
 import { syncService } from './supabaseSync';
 import { SCENE, CAPTIONS } from './authScene';
+import { ThemeToggle } from './components/ui/ThemeToggle';
 import './auth.css';
 
 const I = {
@@ -79,7 +80,7 @@ const Field = ({ icon, label, children, extra, hasVal }) => (
   </label>
 );
 
-export function AuthScreen({ accounts = [], onPick, onNew, onDelAccount, onCloudLogin, theme, toggleTheme }) {
+export function AuthScreen({ accounts = [], onPick, onNew, onDelAccount, onCloudLogin, theme, themeColor = 'coffee', toggleTheme, setTheme, setThemeColor }) {
   const [tab, setTab] = useState('login'), [name, setName] = useState(''), [email, setEmail] = useState(''), [pw, setPw] = useState('');
   const [show, setShow] = useState(false), [loading, setLoading] = useState(false), [msg, setMsg] = useState(null), [out, setOut] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
@@ -126,9 +127,18 @@ export function AuthScreen({ accounts = [], onPick, onNew, onDelAccount, onCloud
   return (
     <div className={'au-wrap' + (out ? ' au-out' : '')}>
       <div className="au-bg"><i /><i /></div>
-      <button className="au-theme" type="button" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Chuyển sang giao diện sáng' : 'Chuyển sang giao diện tối'} title={theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}>
-        <ThemeIcon theme={theme} />
-      </button>
+      <div className="au-theme-wrap">
+        <ThemeToggle
+          theme={theme}
+          themeColor={themeColor}
+          onChangeTheme={({ theme: t, themeColor: c }) => {
+            if (t && setTheme) setTheme(t);
+            if (c && setThemeColor) setThemeColor(c);
+          }}
+          onToggle={toggleTheme}
+          position="auth"
+        />
+      </div>
       <div className="au-card">
         <form className="au-form" onSubmit={submit} autoComplete="off">
           <div className="au-h" key={tab} style={{ '--i': 0 }}>

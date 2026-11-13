@@ -78,14 +78,25 @@ export const legacy = () => {
 
 export const loadMeta = () => {
   const m = rd(META);
-  if (m) return m;
+  if (m) {
+    return {
+      ...m,
+      theme: m.theme || 'dark',
+      themeColor: m.themeColor || 'coffee',
+    };
+  }
   const old = legacy();
   if (old) {
     const id = uid();
     wr(ACC(id), upgrade(old));
-    return { accounts: [{ id, name: old.profile.name }], active: id, theme: old.theme || 'dark' };
+    return {
+      accounts: [{ id, name: old.profile.name }],
+      active: id,
+      theme: old.theme || 'dark',
+      themeColor: old.themeColor || 'coffee',
+    };
   }
-  return { accounts: [], active: null, theme: 'dark' };
+  return { accounts: [], active: null, theme: 'dark', themeColor: 'coffee' };
 };
 
 export const loadDb = id => upgrade(rd(ACC(id)) || seed());

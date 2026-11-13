@@ -20,6 +20,8 @@ alter table public.profiles add column if not exists cash_base numeric default 0
 alter table public.profiles add column if not exists has_onboarded boolean not null default false;
 -- Lưu cấu hình thông báo nhắc việc đồng bộ theo tài khoản
 alter table public.profiles add column if not exists notification_settings jsonb;
+-- Lưu bộ màu chủ đạo (coffee, matcha, ocean, taro, peach)
+alter table public.profiles add column if not exists theme_color text default 'coffee';
 
 -- 2. Bảng Nhóm ngân sách / danh mục
 create table if not exists public.groups (

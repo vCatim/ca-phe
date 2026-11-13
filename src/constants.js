@@ -24,6 +24,15 @@ export const ST = {
 // Bảng màu & nhóm việc mặc định: tên + trọng số ngân sách
 export const PAL = ['#e0a24a', '#5b8def', '#6fae7c', '#a07be0', '#e58e5d', '#d9658b', '#4fb3bf', '#c9b458', '#a99a89'];
 
+// Danh sách bộ màu chủ đề (Theme Color Palettes)
+export const THEME_COLORS = [
+  { id: 'coffee', name: 'Cà phê', icon: '☕', color: '#e5a44a', lightColor: '#b56c17', desc: 'Ấm áp & Cổ điển' },
+  { id: 'matcha', name: 'Matcha', icon: '🍵', color: '#5eb888', lightColor: '#287a46', desc: 'Tươi mát & Tập trung' },
+  { id: 'ocean', name: 'Biển sâu', icon: '🌊', color: '#4fa8f5', lightColor: '#1f6fb2', desc: 'Hiện đại & Tin cậy' },
+  { id: 'taro', name: 'Khoai môn', icon: '🍠', color: '#b288e8', lightColor: '#7b4db8', desc: 'Thư giãn & Sáng tạo' },
+  { id: 'peach', name: 'Trà đào', icon: '🍑', color: '#ea7282', lightColor: '#be4355', desc: 'Ngọt ngào & Năng động' },
+];
+
 export const GRP0 = [
   ['Ăn uống', 0.3],
   ['Đi lại', 0.08],
