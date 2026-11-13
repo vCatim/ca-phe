@@ -103,9 +103,15 @@ export const mergeGroups = (cloudGroups = [], localGroups = []) => {
 export const mergeCloudData = (cloudDb, localDb) => {
   const cloud = cloudDb || seed();
   const local = localDb || seed();
+  const mergedProfile = (cloud.profile || local.profile)
+    ? {
+        ...(local.profile || {}),
+        ...(cloud.profile || {}),
+      }
+    : null;
   return upgrade({
     ...local,
-    profile: cloud.profile || local.profile,
+    profile: mergedProfile,
     groups: mergeGroups(cloud.groups || [], local.groups || []),
     tasks: mergeUniqueTasks(cloud.tasks || [], local.tasks || []),
     goals: mergeUniqueByFingerprint(cloud.goals || [], local.goals || [], goalFingerprint),

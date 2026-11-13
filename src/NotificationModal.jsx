@@ -7,8 +7,9 @@ import {
   sendTestNotification,
   resyncAllReminders,
 } from './notificationManager';
+import { syncService } from './supabaseSync';
 
-export function NotificationModal({ onClose, tasks = [], flash }) {
+export function NotificationModal({ onClose, tasks = [], flash, cloudUser }) {
   const [settings, setSettings] = useState(getNotificationSettings());
   const [permissionGranted, setPermissionGranted] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -31,6 +32,9 @@ export function NotificationModal({ onClose, tasks = [], flash }) {
     const updated = { ...settings, enabled };
     setSettings(updated);
     saveNotificationSettings(updated);
+    if (cloudUser) {
+      syncService.saveNotificationSettings(cloudUser.id, updated);
+    }
 
     if (enabled) {
       await resyncAllReminders(tasks);
@@ -45,6 +49,9 @@ export function NotificationModal({ onClose, tasks = [], flash }) {
     const updated = { ...settings, leadMinutes: Number(leadMinutes) };
     setSettings(updated);
     saveNotificationSettings(updated);
+    if (cloudUser) {
+      syncService.saveNotificationSettings(cloudUser.id, updated);
+    }
     if (updated.enabled) {
       await resyncAllReminders(tasks);
     }

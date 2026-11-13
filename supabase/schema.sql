@@ -18,6 +18,8 @@ alter table public.profiles add column if not exists cash_base numeric default 0
 -- Đánh dấu người dùng đã hoàn tất thiết lập lần đầu để thiết bị mới không
 -- hiển thị lại màn hình thiết lập sau khi đã có dữ liệu trên cloud.
 alter table public.profiles add column if not exists has_onboarded boolean not null default false;
+-- Lưu cấu hình thông báo nhắc việc đồng bộ theo tài khoản
+alter table public.profiles add column if not exists notification_settings jsonb;
 
 -- 2. Bảng Nhóm ngân sách / danh mục
 create table if not exists public.groups (

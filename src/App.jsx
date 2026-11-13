@@ -16,7 +16,8 @@ import {
   cancelTaskReminder,
   startWebNotificationWatcher,
   resyncAllReminders,
-  ensureNotificationChannel
+  ensureNotificationChannel,
+  saveNotificationSettings
 } from './notificationManager';
 
 // Hằng số, Tiện ích & Lưu trữ
@@ -64,7 +65,7 @@ import { Onboarding } from './pages/Onboarding';
 // Xuất lại parseIcs cho tương thích
 export { parseIcs };
 
-function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleTheme }) {
+function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleTheme, setTheme }) {
   const [db, setDb] = useState(() => loadDb(id));
   const [page, setPage] = useState('today');
   const [modal, setModal] = useState(null);
@@ -128,7 +129,19 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
   }, [db.tasks]);
 
   useEffect(() => {
-    authService.getUser().then(u => setCloudUser(u)).catch(() => {});
+    authService.getUser().then(u => {
+      setCloudUser(u);
+      if (u) {
+        syncService.fetchAll(u.id).then(cloud => {
+          if (cloud?.profile?.theme && setTheme) {
+            setTheme(cloud.profile.theme);
+          }
+          if (cloud?.profile?.notificationSettings) {
+            saveNotificationSettings(cloud.profile.notificationSettings);
+          }
+        }).catch(() => {});
+      }
+    }).catch(() => {});
     const sub = authService.onAuthStateChange((_, session) => {
       setCloudUser(session?.user || null);
     });
@@ -136,6 +149,18 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
       sub?.data?.subscription?.unsubscribe?.();
     };
   }, []);
+
+  const handleToggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    if (cloudUser) {
+      syncService.saveTheme(cloudUser.id, nextTheme);
+      setDb(d => ({
+        ...d,
+        profile: d.profile ? { ...d.profile, theme: nextTheme } : d.profile
+      }));
+    }
+    toggleTheme();
+  };
 
   useEffect(() => wr(ACC(id), db), [db]);
 
@@ -419,12 +444,12 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
             </button>
           ))}
         </nav>
-        <ThemeToggle theme={theme} onToggle={toggleTheme} />
+        <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
       </aside>
       <main>
         <div className="top">
           <div className="logo mobl"><LogoIcon s={26} /> Cà Phê</div>
-          <ThemeToggle theme={theme} onToggle={toggleTheme} />
+          <ThemeToggle theme={theme} onToggle={handleToggleTheme} />
         </div>
         <div key={page}>
           {page === 'today' && <Today {...P} />}
@@ -506,7 +531,16 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
             setDb(d => ({ ...d, tasks: [], txs: [], goals: [] }));
             setModal(null);
           }}
-          onDownloadCloud={downloaded => setDb(upgrade({ ...downloaded, tasks: dedupeTasks(downloaded.tasks) }))}
+          onDownloadCloud={downloaded => {
+            setDb(upgrade({ ...downloaded, tasks: dedupeTasks(downloaded.tasks) }));
+            if (downloaded.profile?.theme && setTheme) {
+              setTheme(downloaded.profile.theme);
+            }
+            if (downloaded.profile?.notificationSettings) {
+              saveNotificationSettings(downloaded.profile.notificationSettings);
+              resyncAllReminders(downloaded.tasks || []);
+            }
+          }}
           flash={flash}
           onCloudLinked={(user, linkedDb) => {
             setCloudUser(user);
@@ -554,7 +588,7 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, toggleThe
         />
       )}
       {modal?.k === 'notif' && (
-        <NotificationModal onClose={() => setModal(null)} tasks={db.tasks} flash={flash} />
+        <NotificationModal onClose={() => setModal(null)} tasks={db.tasks} flash={flash} cloudUser={cloudUser} />
       )}
     </div>
   );
@@ -583,6 +617,7 @@ export default function Root() {
     document.documentElement.dataset.theme = theme;
   }, [m, theme]);
 
+  const setTheme = nextTheme => setM(x => ({ ...x, theme: nextTheme }));
   const toggleTheme = () => setM(x => ({ ...x, theme: (x.theme || 'dark') === 'dark' ? 'light' : 'dark' }));
 
   const delAccount = async (accId, deleteCloud = false) => {
@@ -601,6 +636,12 @@ export default function Root() {
   const handleCloudLinked = (user, linkedDb) => {
     const accountName = user.user_metadata?.full_name || linkedDb.profile?.name || user.email.split('@')[0];
     wr(ACC(user.id), upgrade({ ...linkedDb, tasks: dedupeTasks(linkedDb.tasks) }));
+    if (linkedDb.profile?.theme) {
+      setTheme(linkedDb.profile.theme);
+    }
+    if (linkedDb.profile?.notificationSettings) {
+      saveNotificationSettings(linkedDb.profile.notificationSettings);
+    }
     setM(x => {
       const filtered = x.accounts.filter(a => a.id !== x.active && a.id !== user.id);
       return {
@@ -620,6 +661,13 @@ export default function Root() {
 
     const baseDb = mergeCloudData(cloudData, localDb || prevDb);
     const needsOnboarding = !hasCloudSetup(cloudData) && !hasCloudSetup(localDb) && !hasCloudSetup(prevDb);
+
+    if (cloudData?.profile?.theme) {
+      setTheme(cloudData.profile.theme);
+    }
+    if (cloudData?.profile?.notificationSettings) {
+      saveNotificationSettings(cloudData.profile.notificationSettings);
+    }
 
     if (!needsOnboarding) {
       wr(ACC(user.id), baseDb);
@@ -706,6 +754,7 @@ export default function Root() {
         onCloudLinked={handleCloudLinked}
         theme={theme}
         toggleTheme={toggleTheme}
+        setTheme={setTheme}
       />
     );
   }

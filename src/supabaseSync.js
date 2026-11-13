@@ -32,6 +32,8 @@ export const syncService = {
             income: Number(pRes.data.income) || 0,
             cashBase: Number(pRes.data.cash_base) || 0,
             hasOnboarded: Boolean(pRes.data.has_onboarded),
+            theme: pRes.data.theme || 'dark',
+            notificationSettings: pRes.data.notification_settings || null,
           }
         : null;
 
@@ -92,15 +94,20 @@ export const syncService = {
     try {
       // 1. Profile
       if (db.profile) {
-        const { error } = await supabase.from('profiles').upsert({
+        const profilePayload = {
           id: userId,
           name: db.profile.name || 'Người dùng',
           budget: db.profile.budget || 0,
           income: db.profile.income || 0,
           cash_base: db.profile.cashBase || 0,
           has_onboarded: Boolean(db.profile.hasOnboarded),
+          theme: db.profile.theme || 'dark',
           updated_at: new Date().toISOString(),
-        });
+        };
+        if (db.profile.notificationSettings !== undefined) {
+          profilePayload.notification_settings = db.profile.notificationSettings;
+        }
+        const { error } = await supabase.from('profiles').upsert(profilePayload);
         if (error) throw error;
       }
 
@@ -209,7 +216,7 @@ export const syncService = {
   async saveProfile(userId, profile) {
     if (!supabase || !userId) return;
     try {
-      await supabase.from('profiles').upsert({
+      const payload = {
         id: userId,
         name: profile.name,
         budget: profile.budget,
@@ -217,9 +224,38 @@ export const syncService = {
         cash_base: profile.cashBase || 0,
         has_onboarded: Boolean(profile.hasOnboarded),
         updated_at: new Date().toISOString(),
-      });
+      };
+      if (profile.theme) payload.theme = profile.theme;
+      if (profile.notificationSettings !== undefined) payload.notification_settings = profile.notificationSettings;
+      await supabase.from('profiles').upsert(payload);
     } catch (e) {
       console.error(e);
+    }
+  },
+
+  // Cập nhật Theme riêng biệt
+  async saveTheme(userId, theme) {
+    if (!supabase || !userId) return;
+    try {
+      await supabase.from('profiles').update({
+        theme,
+        updated_at: new Date().toISOString(),
+      }).eq('id', userId);
+    } catch (e) {
+      console.error('Error saving theme to Supabase:', e);
+    }
+  },
+
+  // Cập nhật Cài đặt thông báo riêng biệt
+  async saveNotificationSettings(userId, settings) {
+    if (!supabase || !userId) return;
+    try {
+      await supabase.from('profiles').update({
+        notification_settings: settings,
+        updated_at: new Date().toISOString(),
+      }).eq('id', userId);
+    } catch (e) {
+      console.error('Error saving notification settings to Supabase:', e);
     }
   },
 
