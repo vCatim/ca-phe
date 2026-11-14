@@ -40,6 +40,7 @@ import {
 } from './utils/storage';
 import { parseIcs } from './utils/ics';
 import { dedupeTasks, taskFingerprint } from './taskIdentity';
+import { OUTBOX_EVENT } from './utils/outbox';
 
 // Component giao diện (UI)
 import { LogoIcon } from './components/ui/Icons';
@@ -74,6 +75,7 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, themeColo
   const tt = useRef(null);
   const [cloudUser, setCloudUser] = useState(null);
   const [homeDate, setHomeDate] = useState(today());
+  const [pendingSync, setPendingSync] = useState(0);
 
   const modalRef = useRef(modal);
   const pageRef = useRef(page);
@@ -152,6 +154,48 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, themeColo
       sub?.data?.subscription?.unsubscribe?.();
     };
   }, []);
+
+  // Đẩy các thay đổi còn kẹt trong hàng đợi lên cloud: chạy khi mở app, khi có
+  // mạng lại, khi quay lại tab và định kỳ 30 giây.
+  useEffect(() => {
+    if (!cloudUser) {
+      setPendingSync(0);
+      return;
+    }
+
+    let alive = true;
+    const refreshCount = () => {
+      if (alive) setPendingSync(syncService.pendingCount(cloudUser.id));
+    };
+    const flush = async () => {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        refreshCount();
+        return;
+      }
+      const result = await syncService.flushPending(cloudUser.id);
+      if (!alive) return;
+      setPendingSync(result?.remaining ?? syncService.pendingCount(cloudUser.id));
+    };
+
+    refreshCount();
+    flush();
+    const timer = setInterval(flush, 30000);
+    const onOnline = () => flush();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') flush();
+    };
+
+    window.addEventListener('online', onOnline);
+    window.addEventListener(OUTBOX_EVENT, refreshCount);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener(OUTBOX_EVENT, refreshCount);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [cloudUser]);
 
   const handleThemeChange = ({ theme: nextTheme, themeColor: nextColor }) => {
     const t = nextTheme || theme;
@@ -449,6 +493,15 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, themeColo
             </button>
           ))}
         </nav>
+        {pendingSync > 0 && (
+          <button
+            className="btn sm out sync-pending"
+            onClick={openProfile}
+            title="Các thay đổi này sẽ tự đồng bộ khi có mạng"
+          >
+            ⏳ {pendingSync} thay đổi chờ đồng bộ
+          </button>
+        )}
         <ThemeToggle
           theme={theme}
           themeColor={themeColor}
@@ -459,6 +512,15 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, themeColo
       <main>
         <div className="top">
           <div className="logo mobl"><LogoIcon s={26} /> Cà Phê</div>
+          {pendingSync > 0 && (
+            <button
+              className="btn sm out sync-pending"
+              onClick={openProfile}
+              title="Các thay đổi này sẽ tự đồng bộ khi có mạng"
+            >
+              ⏳ {pendingSync}
+            </button>
+          )}
           <ThemeToggle
             theme={theme}
             themeColor={themeColor}
@@ -523,6 +585,14 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, themeColo
           counts={`${db.tasks.length} việc · ${db.txs.length} giao dịch · ${db.goals.length} quỹ`}
           db={db}
           cloudUser={cloudUser}
+          pendingSync={pendingSync}
+          onFlushSync={async () => {
+            const result = await syncService.flushPending(cloudUser.id);
+            setPendingSync(result?.remaining ?? syncService.pendingCount(cloudUser.id));
+            if (result?.ok) flash('☁️ Đã đồng bộ xong các thay đổi đang chờ');
+            else if (result?.reason === 'rejected') flash('⚠️ Cloud từ chối đồng bộ, hãy đăng nhập lại');
+            else flash('❌ Vẫn chưa kết nối được cloud, sẽ tự thử lại');
+          }}
           openGoogleSync={openGoogleSync}
           openNotification={openNotification}
           onClose={() => setModal(null)}
@@ -544,10 +614,16 @@ function App({ id, onLogout, onRename, onDelete, onCloudLinked, theme, themeColo
               }
             }
             setDb(d => ({ ...d, tasks: [], txs: [], goals: [] }));
+            if (cloudUser) syncService.clearPending(cloudUser.id);
+            setPendingSync(0);
             setModal(null);
           }}
           onDownloadCloud={downloaded => {
             setDb(upgrade({ ...downloaded, tasks: dedupeTasks(downloaded.tasks) }));
+            // Dữ liệu local vừa bị thay bằng bản cloud; các thay đổi đang chờ
+            // không còn đúng nữa nên bỏ đi để tránh đẩy ngược lên cloud.
+            if (cloudUser) syncService.clearPending(cloudUser.id);
+            setPendingSync(0);
             if (downloaded.profile?.theme && setTheme) {
               setTheme(downloaded.profile.theme);
             }

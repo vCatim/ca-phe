@@ -7,5 +7,14 @@ dist/
 .DS_Store
 .codex/
 .agents/
+
+# File xem thử giao diện, chỉ dùng khi phát triển
 preview-ui.html
+login-preview.html
 xem-thu-dang-nhap.html
+
+# Bản build & khoá ký ứng dụng (không bao giờ commit)
+*.apk
+*.aab
+*.jks
+*.keystore

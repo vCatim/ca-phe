@@ -9,6 +9,8 @@ export function ProfileModal({
   counts,
   db,
   cloudUser,
+  pendingSync = 0,
+  onFlushSync,
   onClose,
   onSave,
   onLogout,
@@ -149,6 +151,22 @@ export function ProfileModal({
                 <p className="mut s" style={{ margin: 0 }}>
                   Dữ liệu của bạn được tự động sao lưu an toàn trên đám mây Supabase.
                 </p>
+                {pendingSync > 0 && (
+                  <div
+                    className="row between s"
+                    style={{
+                      gap: 8,
+                      padding: '8px 10px',
+                      borderRadius: 10,
+                      background: 'color-mix(in srgb,var(--warn) 14%,transparent)',
+                      border: '1px solid color-mix(in srgb,var(--warn) 45%,transparent)',
+                      color: 'var(--warn)',
+                    }}
+                  >
+                    <span>⏳ {pendingSync} thay đổi chờ đồng bộ</span>
+                    <button className="btn sm out" onClick={onFlushSync}>Thử lại</button>
+                  </div>
+                )}
                 <div className="sync-actions" style={{ marginTop: 2 }}>
                   <button className="btn sm out" disabled={syncing} onClick={doDownloadCloud} aria-label="Tải dữ liệu từ Email về máy">
                     {syncing ? 'Đang tải...' : '☁️ Tải từ Email'}

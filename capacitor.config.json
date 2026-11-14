@@ -6,14 +6,6 @@
     "androidScheme": "https"
   },
   "plugins": {
-    "SplashScreen": {
-      "launchShowDuration": 1500,
-      "launchAutoHide": true,
-      "backgroundColor": "#EDEBE5",
-      "androidSplashResourceName": "splash",
-      "androidScaleType": "CENTER_CROP",
-      "showSpinner": false
-    },
     "StatusBar": {
       "overlaysWebView": false
     }

@@ -6,6 +6,11 @@ const SETTINGS_KEY = 'caphe_notification_settings';
 const NOTIFIED_TASKS_KEY = 'caphe_notified_tasks';
 export const REMINDER_CHANNEL_ID = 'reminders';
 
+// Icon dùng cho Web Notification. Phải là đường dẫn tương đối theo base của
+// Vite, nếu không sẽ 404 khi app chạy trong APK (https://localhost/) hoặc
+// dưới thư mục con của GitHub Pages.
+const NOTIFICATION_ICON = `${import.meta.env.BASE_URL}icon-192.png`;
+
 const hashCode = (str) => {
   let hash = 0;
   const s = String(str || '');
@@ -99,6 +104,32 @@ export const checkNotificationPermission = async () => {
   }
 
   return false;
+};
+
+// Kiểm tra quyền đặt báo thức chính xác (Android 12+). Thiếu quyền này thì
+// AlarmManager vẫn chạy nhưng hệ thống có thể dời giờ báo, nên cần nhắc người
+// dùng bật thủ công.
+export const checkExactAlarmPermission = async () => {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    if (typeof LocalNotifications.checkExactNotificationSetting !== 'function') return true;
+    const res = await LocalNotifications.checkExactNotificationSetting();
+    return !res || res.exact_alarm !== 'denied';
+  } catch (e) {
+    return true;
+  }
+};
+
+// Mở màn hình cài đặt hệ thống để người dùng cấp quyền báo thức chính xác.
+export const requestExactAlarmPermission = async () => {
+  if (!Capacitor.isNativePlatform()) return true;
+  try {
+    if (typeof LocalNotifications.changeExactNotificationSetting !== 'function') return false;
+    await LocalNotifications.changeExactNotificationSetting();
+    return await checkExactAlarmPermission();
+  } catch (e) {
+    return false;
+  }
 };
 
 // Hủy thông báo của 1 task khi bị xóa hoặc hoàn thành
@@ -277,7 +308,7 @@ export const startWebNotificationWatcher = (getTasksCallback, onNotifyCallback) 
         try {
           new Notification(title, {
             body,
-            icon: '/icon-192.png',
+            icon: NOTIFICATION_ICON,
             tag: notifKey,
           });
         } catch (e) {}
@@ -319,7 +350,7 @@ export const sendTestNotification = async () => {
   } else {
     new Notification(title, {
       body,
-      icon: '/icon-192.png',
+      icon: NOTIFICATION_ICON,
     });
   }
 

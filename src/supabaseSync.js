@@ -1,5 +1,77 @@
 import { supabase } from './supabase';
 import { dedupeTasks, goalFingerprint, mergeUniqueByFingerprint, taskFingerprint, transactionFingerprint } from './taskIdentity';
+import {
+  clearOutbox,
+  enqueueOutbox,
+  markOutboxAttempt,
+  pendingOutboxCount,
+  readOutbox,
+  removeOutboxEntity,
+  sortedOutbox,
+} from './utils/outbox';
+
+// Tránh chạy nhiều lượt đẩy hàng đợi cùng lúc (interval + online + visibilitychange).
+let flushing = false;
+
+const taskRow = (userId, task) => ({
+  id: String(task.id),
+  user_id: userId,
+  title: task.title,
+  date: task.date,
+  start_time: task.start,
+  end_time: task.end,
+  cat: task.cat,
+  pri: task.pri,
+  note: task.note || '',
+  status: task.status,
+  google_event_id: task.googleEventId || null,
+  google_task_id: task.googleTaskId || null,
+});
+
+const txRow = (userId, tx) => ({
+  id: String(tx.id),
+  user_id: userId,
+  type: tx.type,
+  amount: tx.amount,
+  date: tx.date,
+  note: tx.note || '',
+  task_id: tx.taskId || null,
+  goal_id: tx.goalId || null,
+  auto_goal: tx.autoGoal !== false,
+  grp: tx.grp || 'Khác',
+  tk: tx.tk || '',
+  alloc: tx.alloc || null,
+});
+
+const goalRow = (userId, goal) => ({
+  id: String(goal.id),
+  user_id: userId,
+  title: goal.title,
+  target: goal.balance ?? goal.target ?? 0,
+  current: goal.balance ?? goal.current ?? 0,
+  unit: goal.unit || 'đ',
+  pri: goal.pri || 'Trung bình',
+  auto: false,
+});
+
+// Ghi 1 bản ghi lên Supabase. Nhờ supabase-js trả về { error } thay vì ném lỗi,
+// lỗi mạng/quyền trước đây bị bỏ qua hoàn toàn. Nay thất bại sẽ được đưa vào
+// outbox để thử lại, còn thành công thì xoá bản ghi đang chờ của entity đó.
+const writeRow = async (userId, table, op, entityId, row) => {
+  if (!supabase || !userId) return false;
+  try {
+    const { error } = op === 'delete'
+      ? await supabase.from(table).delete().eq('id', String(entityId)).eq('user_id', userId)
+      : await supabase.from(table).upsert(row);
+    if (error) throw error;
+    removeOutboxEntity(userId, table, entityId);
+    return true;
+  } catch (e) {
+    console.warn(`Không đồng bộ được ${table}/${entityId}, đã xếp vào hàng đợi:`, e?.message || e);
+    enqueueOutbox(userId, { op, table, entityId, payload: op === 'upsert' ? row : null });
+    return false;
+  }
+};
 
 export const syncService = {
   // Lấy toàn bộ dữ liệu người dùng từ Supabase
@@ -289,32 +361,19 @@ export const syncService = {
   // Lưu và xóa nhóm chi tiêu. Trước đây nhóm chỉ được sao lưu trong lần upload toàn bộ.
   async upsertGroup(userId, group) {
     if (!supabase || !userId || !group?.name) return false;
-    try {
-      const { error } = await supabase.from('groups').upsert({
-        id: `${userId}_${group.name}`,
-        user_id: userId,
-        name: group.name,
-        share: group.share,
-        color: group.color,
-      });
-      if (error) throw error;
-      return true;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
+    const row = {
+      id: `${userId}_${group.name}`,
+      user_id: userId,
+      name: group.name,
+      share: group.share,
+      color: group.color,
+    };
+    return writeRow(userId, 'groups', 'upsert', row.id, row);
   },
 
   async deleteGroup(userId, groupName) {
     if (!supabase || !userId || !groupName) return false;
-    try {
-      const { error } = await supabase.from('groups').delete().eq('user_id', userId).eq('name', groupName);
-      if (error) throw error;
-      return true;
-    } catch (e) {
-      console.error(e);
-      return false;
-    }
+    return writeRow(userId, 'groups', 'delete', `${userId}_${groupName}`, null);
   },
 
   // Xóa phần dữ liệu mà thao tác "xóa toàn bộ" trong ứng dụng đề cập đến.
@@ -328,6 +387,8 @@ export const syncService = {
       ]);
       const failed = results.find(result => result.error);
       if (failed) throw failed.error;
+      // Dữ liệu đã xoá trên cloud thì các thay đổi đang chờ cũng không còn ý nghĩa.
+      clearOutbox(userId);
       return true;
     } catch (e) {
       console.error(e);
@@ -337,93 +398,82 @@ export const syncService = {
 
   // Lưu Task
   async upsertTask(userId, task) {
-    if (!supabase || !userId) return;
-    try {
-      await supabase.from('tasks').upsert({
-        id: String(task.id),
-        user_id: userId,
-        title: task.title,
-        date: task.date,
-        start_time: task.start,
-        end_time: task.end,
-        cat: task.cat,
-        pri: task.pri,
-        note: task.note || '',
-        status: task.status,
-        google_event_id: task.googleEventId || null,
-        google_task_id: task.googleTaskId || null,
-      });
-    } catch (e) {
-      console.error(e);
-    }
+    if (!supabase || !userId || !task?.id) return false;
+    return writeRow(userId, 'tasks', 'upsert', task.id, taskRow(userId, task));
   },
 
   async deleteTask(userId, taskId) {
-    if (!supabase || !userId) return;
-    try {
-      await supabase.from('tasks').delete().eq('id', String(taskId)).eq('user_id', userId);
-    } catch (e) {
-      console.error(e);
-    }
+    if (!supabase || !userId || !taskId) return false;
+    return writeRow(userId, 'tasks', 'delete', taskId, null);
   },
 
   // Lưu Giao dịch
   async upsertTx(userId, tx) {
-    if (!supabase || !userId) return;
-    try {
-      await supabase.from('transactions').upsert({
-        id: String(tx.id),
-        user_id: userId,
-        type: tx.type,
-        amount: tx.amount,
-        date: tx.date,
-        note: tx.note || '',
-        task_id: tx.taskId || null,
-        goal_id: tx.goalId || null,
-        auto_goal: tx.autoGoal !== false,
-        grp: tx.grp || 'Khác',
-        tk: tx.tk || '',
-        alloc: tx.alloc || null,
-      });
-    } catch (e) {
-      console.error(e);
-    }
+    if (!supabase || !userId || !tx?.id) return false;
+    return writeRow(userId, 'transactions', 'upsert', tx.id, txRow(userId, tx));
   },
 
   async deleteTx(userId, txId) {
-    if (!supabase || !userId) return;
-    try {
-      await supabase.from('transactions').delete().eq('id', String(txId)).eq('user_id', userId);
-    } catch (e) {
-      console.error(e);
-    }
+    if (!supabase || !userId || !txId) return false;
+    return writeRow(userId, 'transactions', 'delete', txId, null);
   },
 
-  // Lưu Mục tiêu
+  // Lưu Mục tiêu / Quỹ
   async upsertGoal(userId, goal) {
-    if (!supabase || !userId) return;
-    try {
-      await supabase.from('goals').upsert({
-        id: String(goal.id),
-        user_id: userId,
-        title: goal.title,
-        target: goal.balance ?? goal.target ?? 0,
-        current: goal.balance ?? goal.current ?? 0,
-        unit: goal.unit || 'đ',
-        pri: goal.pri || 'Trung bình',
-        auto: false,
-      });
-    } catch (e) {
-      console.error(e);
-    }
+    if (!supabase || !userId || !goal?.id) return false;
+    return writeRow(userId, 'goals', 'upsert', goal.id, goalRow(userId, goal));
   },
 
   async deleteGoal(userId, goalId) {
-    if (!supabase || !userId) return;
+    if (!supabase || !userId || !goalId) return false;
+    return writeRow(userId, 'goals', 'delete', goalId, null);
+  },
+
+  // ===== Hàng đợi đồng bộ =====
+  pendingCount(userId) {
+    return pendingOutboxCount(userId);
+  },
+
+  clearPending(userId) {
+    clearOutbox(userId);
+  },
+
+  // Đẩy các thay đổi đang chờ lên cloud. Trả về số bản ghi còn lại để UI hiển thị.
+  async flushPending(userId) {
+    if (!supabase || !userId) return { ok: false, reason: 'unconfigured', remaining: 0 };
+    if (flushing) return { ok: true, reason: 'busy', remaining: pendingOutboxCount(userId) };
+
+    const queue = sortedOutbox(readOutbox(userId));
+    if (!queue.length) return { ok: true, remaining: 0 };
+
+    flushing = true;
     try {
-      await supabase.from('goals').delete().eq('id', String(goalId)).eq('user_id', userId);
+      for (const entry of queue) {
+        const request = entry.op === 'delete'
+          ? supabase.from(entry.table).delete().eq('id', entry.entityId).eq('user_id', userId)
+          : supabase.from(entry.table).upsert(entry.payload);
+        const { error } = await request;
+
+        if (error) {
+          markOutboxAttempt(userId, entry.seq, error.message);
+          const status = Number(error.status) || 0;
+          // status = 0 thường là mất mạng; 429/5xx là lỗi tạm thời.
+          const transient = !status || status >= 500 || status === 429;
+          return {
+            ok: false,
+            reason: transient ? 'network' : 'rejected',
+            error: error.message,
+            remaining: pendingOutboxCount(userId),
+          };
+        }
+        removeOutboxEntity(userId, entry.table, entry.entityId);
+      }
+      return { ok: true, remaining: 0 };
     } catch (e) {
-      console.error(e);
+      // Lỗi mạng ngoài dự kiến: giữ nguyên hàng đợi để lần sau thử lại.
+      return { ok: false, reason: 'network', error: e?.message, remaining: pendingOutboxCount(userId) };
+    } finally {
+      flushing = false;
     }
   },
 };

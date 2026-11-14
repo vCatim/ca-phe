@@ -24,13 +24,19 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
+        // Dùng đường dẫn tương đối để manifest hoạt động ở cả GitHub Pages
+        // (/ca-phe/) lẫn trong APK Capacitor (https://localhost/).
+        id: './',
         name: 'Cà Phê',
         short_name: 'Cà Phê',
         description: 'Quản lý lịch trình và chi tiêu cá nhân',
+        lang: 'vi',
         theme_color: '#1c1511',
         background_color: '#1c1511',
         display: 'standalone',
-        start_url: '/ca-phe/',
+        start_url: './',
+        scope: './',
+        categories: ['productivity', 'finance'],
         icons: [
           { src: 'favicon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },

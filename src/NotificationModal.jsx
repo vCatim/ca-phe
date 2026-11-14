@@ -6,17 +6,21 @@ import {
   requestNotificationPermission,
   sendTestNotification,
   resyncAllReminders,
+  checkExactAlarmPermission,
+  requestExactAlarmPermission,
 } from './notificationManager';
 import { syncService } from './supabaseSync';
 
 export function NotificationModal({ onClose, tasks = [], flash, cloudUser }) {
   const [settings, setSettings] = useState(getNotificationSettings());
   const [permissionGranted, setPermissionGranted] = useState(false);
+  const [exactAlarmOk, setExactAlarmOk] = useState(true);
   const [testing, setTesting] = useState(false);
   const [msg, setMsg] = useState(null);
 
   useEffect(() => {
     checkNotificationPermission().then(setPermissionGranted);
+    checkExactAlarmPermission().then(setExactAlarmOk);
   }, []);
 
   const handleToggleEnable = async (enabled) => {
@@ -129,6 +133,36 @@ export function NotificationModal({ onClose, tasks = [], flash, cloudUser }) {
                 </button>
               )}
             </div>
+            {!exactAlarmOk && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  fontSize: '.8rem',
+                  lineHeight: 1.45,
+                  background: 'rgba(232, 144, 106, 0.14)',
+                  border: '1px solid var(--warn)',
+                  color: 'var(--warn)',
+                }}
+              >
+                <div style={{ marginBottom: 6 }}>
+                  ⚠️ Chưa bật “Báo thức và nhắc nhở” cho ứng dụng. Thiếu quyền này, Android có thể dời giờ nhắc.
+                </div>
+                <button
+                  className="btn sm out"
+                  onClick={async () => {
+                    const granted = await requestExactAlarmPermission();
+                    setExactAlarmOk(granted);
+                    if (!granted) {
+                      setMsg({ type: 'err', text: 'Bạn hãy bật “Báo thức và nhắc nhở” trong phần cài đặt vừa mở rồi quay lại nhé.' });
+                    }
+                  }}
+                >
+                  Mở cài đặt hệ thống
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Bật / tắt */}
